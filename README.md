@@ -4,7 +4,7 @@ VEGA is a local project coding-agent for working with code, project structure, l
 
 ## Current version
 
-v0.5.0
+v0.7.0
 
 ## Features
 
@@ -48,6 +48,7 @@ python scripts\vega.py
 /docs list
 /docs index
 /docs search <query>
+/docs read <filename>
 /task
 /task new <title>
 /task plan
@@ -100,10 +101,30 @@ data\tasks\archive\
 
 ## Documents / RAG
 
-Documents folder:
+VEGA v0.7.0 can read local text documents, build a simple local index, and search it.
+
+Put documents here:
 
 ```text
 data\documents
+```
+
+Create or rebuild the index:
+
+```text
+/docs index
+```
+
+Search indexed documents:
+
+```text
+/docs search <query>
+```
+
+Read a document:
+
+```text
+/docs read <filename>
 ```
 
 Index file:
@@ -112,16 +133,10 @@ Index file:
 data\index\documents_index.json
 ```
 
-To rebuild index:
+Supported formats:
 
 ```text
-/docs index
-```
-
-To search:
-
-```text
-/docs search <query>
+.txt, .md, .py, .json, .csv
 ```
 
 ## Health check
@@ -142,7 +157,7 @@ Result: OK
 
 Current stable checkpoint:
 
-v0.5.0 - CLI agent with Task Console and local Documents / RAG.
+v0.7.0 - CLI agent with Task Console and local Document Reader / RAG.
 
 Next planned stage:
 

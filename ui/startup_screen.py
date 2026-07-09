@@ -55,7 +55,7 @@ def render_startup_screen(
     status: str | None = None,
     log_path: Any | None = None,
 ) -> None:
-    version = version or "v0.5.0"
+    version = version or "v0.7.0"
     model = model or "vega-core"
     internet_status = internet_status or "OFF"
     status = status or "Ready"
