@@ -1,3 +1,9 @@
 fastapi
 uvicorn
 requests
+
+# Optional document format support
+# VEGA works with .txt, .md, .py, .json and .csv without these packages.
+# Install these only if you need PDF/DOCX document reading.
+pypdf
+python-docx

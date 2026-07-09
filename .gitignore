@@ -37,3 +37,15 @@ scripts/*.bak*
 
 # Archived local task snapshots
 data/tasks/archive/
+
+# Local model profile state
+data/model_profile.json
+
+# Keep user documents out of git by default
+data/documents/*
+!data/documents/example.md
+!data/documents/smoke_test.md
+
+# Extra Python artifacts
+.Python
+.env.local

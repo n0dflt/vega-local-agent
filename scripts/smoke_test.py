@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "v0.9.0"
+EXPECTED_VERSION = "v1.0.0"
 
 
 def status(label: str, ok: bool, detail: str = "") -> str:

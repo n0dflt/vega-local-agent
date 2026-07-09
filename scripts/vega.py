@@ -15,7 +15,7 @@ from pathlib import Path
 try:
     from version import APP_NAME, APP_SUBTITLE, VERSION
 except ImportError:
-    VERSION = "v0.9.0"
+    VERSION = "v1.0.0"
     APP_NAME = "VEGA"
     APP_SUBTITLE = "Local Project Coding-Agent"
 
@@ -30,7 +30,7 @@ def configure_output() -> None:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-FALLBACK_SYSTEM_PROMPT = """Ты — VEGA, локальный проектный coding-agent v0.9.0.
+FALLBACK_SYSTEM_PROMPT = """Ты — VEGA, локальный проектный coding-agent v1.0.0.
 Твоя задача — помогать пользователю проектировать архитектуру, писать код, проверять код, находить ошибки, давать patch plan и работать как проектный агент, а не как обычный чат-бот.
 
 Обязательные правила поведения:
@@ -119,44 +119,30 @@ def banner(root: Path, model: str) -> str:
 def help_text() -> str:
     return "\n".join([
         "Available commands:",
+        "  /about                  Show VEGA release information.",
         "  /help                   Show this help.",
-        "  /status                 Show VEGA runtime status",
+        "  /status                 Show VEGA runtime status.",
+        "  /doctor                 Run project diagnostics.",
         "  /model                  Show current model profile.",
         "  /model status           Show Ollama/model status.",
         "  /model install-help     Show recommended install commands.",
-        "  /model fast             Select fast model profile.",
-        "  /model code             Select code model profile.",
-        "  /model docs             Select docs model profile.",
-        "  /model deep             Select deep model profile.",
-        "  /project                Show project path.",
-        "  /project status         Show project control status.",
-        "  /clear                  Clear the terminal screen.",
-        "  /log                    Show current session log path.",
-        "  /doctor                 Run project diagnostics.",
-        "  /docs                   Show documents help",
-        "  /docs list              Show indexed documents",
-        "  /docs index             Rebuild local document index",
-        "  /docs search <query>    Search indexed documents",
-        "  /docs read <filename>   Read a local document",
-        "  /docs analyze <file>    Analyze a local document",
-        "  /docs summarize <file>  Summarize a local document",
-        "  /docs ask <question>    Ask indexed documents",
-        "  /docs formats           Show supported document formats",
+        "  /docs                   Show documents help.",
+        "  /docs list              Show documents.",
+        "  /docs index             Rebuild local document index.",
+        "  /docs search <query>    Search indexed documents.",
+        "  /docs read <filename>   Read a local document.",
+        "  /docs analyze <file>    Analyze a local document.",
+        "  /docs summarize <file>  Summarize a local document.",
+        "  /docs ask <question>    Ask indexed documents.",
         "",
         "Task Console:",
         "/workspace              Show workspace state",
         "/task                   Show task command help",
-        "/task new <title>       Create new current task",
-        "/task status            Show current task status",
-        "/task plan              Show current task plan",
-        "/task review            Run coordinator review gate",
-        "/task done              Complete current task after review",
-        "/journal                Show last 10 project journal records",
+        "/exit                   Exit VEGA",
         "",
-        "Session:",
-        "  /exit                   Exit VEGA.",
-        "  /bye                    Exit VEGA.",
-        "  /q                      Exit VEGA.",
+        "More:",
+        "  /model fast | /model code | /model docs | /model deep",
+        "  /project | /project status | /log | /clear",
     ])
 
 
@@ -409,6 +395,7 @@ def handle_model_command(command: str, root: Path) -> None:
 
 def print_available_commands() -> None:
     print("Available:")
+    print("/about")
     print("/workspace")
     print("/task")
     print("/journal")
@@ -419,6 +406,34 @@ def print_available_commands() -> None:
     print("/model")
     print("/docs")
     print("/exit")
+
+
+def print_about() -> None:
+    print("VEGA Local Agent")
+    print(f"Version: {VERSION}")
+    print("Type: Local Project Coding-Agent")
+    print("Runtime: CLI")
+    print(f"Internet: {INTERNET}")
+    print("Documents: supported")
+    print("RAG: local keyword index")
+    print("Model profiles: fast, code, docs, deep")
+    print("Default model profile: code")
+    print("")
+    print("Purpose:")
+    print(
+        "VEGA helps with local project work, code assistance, document reading, "
+        "document analysis, and project diagnostics."
+    )
+    print("")
+    print("Main commands:")
+    print("  /help")
+    print("  /status")
+    print("  /doctor")
+    print("  /model")
+    print("  /docs")
+    print("  /workspace")
+    print("  /task")
+    print("  /exit")
 
 
 def handle_doctor_command(root: Path) -> None:
@@ -683,7 +698,9 @@ def handle_command(command: str, root: Path, log_file: Path, model: str) -> bool
     command = command.strip()
     lower = command.lower()
 
-    if lower == "/help":
+    if lower == "/about":
+        print_about()
+    elif lower == "/help":
         print(help_text())
     elif lower == "/status":
         print_status(root, log_file, model)

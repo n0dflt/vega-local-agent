@@ -1,10 +1,10 @@
-# VEGA
+﻿# VEGA
 
 VEGA is a local project coding-agent for working with code, project structure, local tasks, and local documents.
 
 ## Current version
 
-v0.9.0
+v1.0.0
 
 ## Features
 
@@ -28,7 +28,7 @@ v0.9.0
 * Windows
 * Python 3.14+
 * Ollama
-* Local Ollama model: vega-core
+* Recommended local Ollama model: qwen2.5-coder:14b
 
 ## Run
 
@@ -115,7 +115,7 @@ data\tasks\archive\
 
 ## Documents / RAG
 
-VEGA v0.9.0 can read local documents, build a simple local index, search it, and run deterministic local analysis.
+VEGA v1.0.0 can read local documents, build a simple local index, search it, and run deterministic local analysis.
 
 Put documents here:
 
@@ -165,7 +165,7 @@ Analysis commands:
 
 `/docs ask <question>` shows an extractive answer plus numbered sources.
 
-## v0.9.0 - Runtime Polish & Smarter Docs
+## v1.0.0 - Stable Local Agent Release
 
 Model:
 
@@ -291,10 +291,15 @@ Result: OK
 
 Current stable checkpoint:
 
-v0.9.0 - Runtime Polish & Smarter Docs.
+v1.0.0 - Stable Local Agent Release.
 
 Next planned stage:
 
 ```text
-undecided
+v1.1 - improve document Q&A and project scanner
 ```
+
+
+
+
+
