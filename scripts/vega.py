@@ -550,6 +550,7 @@ def task_help_text() -> str:
         "  /task new <title>    Create a new current task",
         "  /task status         Show current task, status, plan, and recent notes",
         "  /task plan           Show current task plan",
+        "  /task start          Start the current task",
         "  /task review         Run Coordinator Review Gate",
         "  /task done           Mark task done after review",
         "  /journal             Show last 10 project journal records",
@@ -664,6 +665,32 @@ def handle_task_command(command: str, root: Path) -> None:
         print_task_plan(manager.get_current_task())
         return
 
+    if lower == "/task start":
+        task = manager.get_current_task()
+
+        if task is None:
+            print(
+                "No current task. "
+                "Create one with: /task new <title>"
+            )
+            return
+
+        try:
+            task = manager.set_status(
+                task["id"],
+                "in_progress",
+            )
+        except ValueError as exc:
+            print(str(exc))
+            return
+
+        print(
+            f"Task started: "
+            f"{task.get('id')} - "
+            f"{task.get('title')}"
+        )
+        return
+
     if lower.startswith("/task new"):
         title = stripped[len("/task new"):].strip()
         try:
@@ -691,10 +718,25 @@ def handle_task_command(command: str, root: Path) -> None:
 
     if lower == "/task review":
         task = manager.get_current_task()
+
         if task is None:
-            print("No current task. Create one with: /task new <title>")
+            print(
+                "No current task. "
+                "Create one with: /task new <title>"
+            )
             return
-        review = ReviewGate(root).review_task(task, changed_files=[])
+
+        if task.get("status") != "in_progress":
+            print(
+                "Task must be in progress before review. "
+                "Run /task start."
+            )
+            return
+
+        review = ReviewGate(root).review_task(
+            task,
+            changed_files=[],
+        )
         manager.log_event("review_started", task["id"], review.get("summary", "Review started."))
         new_status = "waiting_review" if review.get("status") == "passed" else "needs_rework"
         manager.set_status(task["id"], new_status)
@@ -707,8 +749,11 @@ def handle_task_command(command: str, root: Path) -> None:
         if task is None:
             print("No current task. Create one with: /task new <title>")
             return
-        if task.get("status") not in {"waiting_review", "done"}:
-            print("Task needs review before done. Run /task review first.")
+        if task.get("status") != "waiting_review":
+            print(
+                "Task needs review before done. "
+                "Run /task review first."
+            )
             return
         task = manager.mark_done(task["id"])
         print(f"Task done: {task.get('id')} - {task.get('title')}")

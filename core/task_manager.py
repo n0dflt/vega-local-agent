@@ -5,6 +5,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.task_state import (
+    TaskStateError,
+    TaskStatus,
+    validate_transition,
+)
+
 
 PROJECT_STATE_DIR = Path("data") / "project_state"
 TASKS_FILE = PROJECT_STATE_DIR / "tasks.json"
@@ -164,13 +170,49 @@ class TaskManager:
                 return task
         raise ValueError(f"Task not found: {task_id}")
 
-    def set_status(self, task_id: str, status: str) -> dict[str, Any]:
+    def set_status(
+        self,
+        task_id: str,
+        status: str,
+    ) -> dict[str, Any]:
         if status not in VALID_STATUSES:
-            raise ValueError(f"Unsupported task status: {status}")
-        task = self._update_task(task_id, {"status": status})
-        self.log_event("status_changed", task_id, f"Task status changed to {status}")
-        if status == "needs_rework":
-            self.log_event("sent_to_rework", task_id, "Task sent to rework after review.")
+            raise ValueError(
+                f"Unsupported task status: {status}"
+            )
+
+        current_task = self.get_task(task_id)
+
+        try:
+            target_status = validate_transition(
+                current_task["status"],
+                status,
+            )
+        except TaskStateError as exc:
+            raise ValueError(str(exc)) from exc
+
+        task = self._update_task(
+            task_id,
+            {
+                "status": target_status.value,
+            },
+        )
+
+        self.log_event(
+            "status_changed",
+            task_id,
+            (
+                "Task status changed to "
+                f"{target_status.value}"
+            ),
+        )
+
+        if target_status == TaskStatus.NEEDS_REWORK:
+            self.log_event(
+                "sent_to_rework",
+                task_id,
+                "Task sent to rework after review.",
+            )
+
         return task
 
     def add_plan(self, task_id: str, items: list[str]) -> dict[str, Any]:
@@ -192,9 +234,21 @@ class TaskManager:
                 return task
         raise ValueError(f"Task not found: {task_id}")
 
-    def mark_done(self, task_id: str) -> dict[str, Any]:
-        task = self._update_task(task_id, {"status": "done"})
-        self.log_event("task_done", task_id, "Task completed successfully.")
+    def mark_done(
+        self,
+        task_id: str,
+    ) -> dict[str, Any]:
+        task = self.set_status(
+            task_id,
+            TaskStatus.DONE.value,
+        )
+
+        self.log_event(
+            "task_done",
+            task_id,
+            "Task completed successfully.",
+        )
+
         return task
 
 
@@ -247,10 +301,33 @@ def build_review(project_root: Path | None = None) -> dict[str, Any]:
     task = manager.get_current_task()
     if task is None:
         return _result(False, "No active task.")
+    if task.get("status") != TaskStatus.IN_PROGRESS.value:
+        return _result(
+            False,
+            "Task must be in progress before review.",
+            task=task,
+        )
+
     review = ReviewGate(project_root).review_task(task)
-    manager.log_event("review_started", task["id"], review.get("summary", "Review started."))
-    new_status = "waiting_review" if review.get("status") == "passed" else "needs_rework"
-    task = manager.set_status(task["id"], new_status)
+    manager.log_event(
+        "review_started",
+        task["id"],
+        review.get(
+            "summary",
+            "Review started.",
+        ),
+    )
+
+    new_status = (
+        TaskStatus.WAITING_REVIEW.value
+        if review.get("status") == "passed"
+        else TaskStatus.NEEDS_REWORK.value
+    )
+
+    task = manager.set_status(
+        task["id"],
+        new_status,
+    )
     review["task"] = task
     return _result(True, "", review=review)
 
