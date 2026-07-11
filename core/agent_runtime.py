@@ -1,15 +1,12 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """VEGA CLI shell over the Ollama HTTP chat API."""
 
 from __future__ import annotations
 
 import datetime as dt
 import importlib.util
-import json
 import os
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 try:
@@ -17,9 +14,19 @@ try:
 except ImportError:
     from scripts.version import APP_NAME, APP_SUBTITLE, VERSION
 
+from core.command_router import CommandTarget
+from core.execution_context import ExecutionContext
+from core.ollama_client import (
+    call_ollama_chat,
+    check_ollama_ready,
+)
+from core.orchestrator import (
+    AgentOrchestrator,
+    OrchestrationKind,
+)
+
 DEFAULT_MODEL = "vega-core"
 INTERNET = "OFF"
-API_URL = "http://localhost:11434/api/chat"
 
 
 def configure_output() -> None:
@@ -222,19 +229,6 @@ def create_log(root: Path, model: str) -> Path:
     return log_file
 
 
-def api_error_message() -> str:
-    return "\n".join([
-        "Ollama API is unavailable.",
-        "Check that Ollama is running.",
-        "Then try:",
-        "ollama list",
-    ])
-
-
-def missing_model_message(model: str) -> str:
-    return f"Model may not be installed. Run: ollama pull {model}"
-
-
 def model_unavailable_chat_message(model: str) -> str:
     return "\n".join([
         "Current model is not installed.",
@@ -247,53 +241,6 @@ def model_unavailable_chat_message(model: str) -> str:
         "  /model docs",
         "  /model deep",
     ])
-
-
-def call_ollama_chat(model: str, messages: list[dict[str, str]]) -> tuple[bool, str]:
-    payload = json.dumps({"model": model, "messages": messages, "stream": False}).encode("utf-8")
-    request = urllib.request.Request(
-        API_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            raw = response.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 404 or "not found" in body.lower() or "model" in body.lower():
-            return False, f"Model `{model}` was not found.\n{missing_model_message(model)}"
-        return False, body.strip() or f"Ollama API returned HTTP {exc.code}."
-    except (urllib.error.URLError, TimeoutError, OSError):
-        return False, api_error_message()
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return False, raw.strip() or "Ollama API returned an unreadable response."
-
-    if data.get("error"):
-        error = str(data["error"])
-        if "not found" in error.lower() or "model" in error.lower():
-            return False, f"Model `{model}` was not found.\n{missing_model_message(model)}"
-        return False, error
-
-    message = data.get("message", {})
-    content = message.get("content", "") if isinstance(message, dict) else ""
-    return True, content.strip()
-
-
-def check_ollama_ready(model: str) -> tuple[bool, str]:
-    messages = [
-        {"role": "system", "content": "Reply with exactly: OK"},
-        {"role": "user", "content": "health check"},
-    ]
-    ok, response = call_ollama_chat(model, messages)
-    if ok:
-        return True, response
-    return False, response
 
 
 def load_task_state(root: Path) -> tuple[str, str]:
@@ -898,120 +845,345 @@ def handle_command(command: str, root: Path, log_file: Path, model: str, mode_se
     return True
 
 
+def dispatch_docs_command(
+    command: str,
+    root: Path,
+) -> None:
+    """Execute the existing local documents command."""
+    try:
+        from rag.commands import (
+            handle_docs_command,
+        )
+
+        handle_docs_command(
+            command,
+            root,
+        )
+    except Exception as exc:
+        print(
+            f"VEGA docs command error: {exc}"
+        )
+
+
+def build_orchestrator(
+    root: Path,
+    model: str,
+    log_file: Path,
+    system_prompt: str,
+    mode_session,
+) -> AgentOrchestrator:
+    """Create the orchestration layer for one CLI session."""
+    context = ExecutionContext(
+        project_root=root,
+        model=model,
+        log_file=log_file,
+        system_prompt=system_prompt,
+        mode_session=mode_session,
+    )
+
+    return AgentOrchestrator(context)
+
+
 def main() -> int:
     configure_output()
+
     root = project_root()
     model = load_model_name(root)
     system_prompt = load_system_prompt(root)
     log_file = create_log(root, model)
-    messages = [{"role": "system", "content": system_prompt}]
 
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-    from core.agent_modes import ModeRegistry, ModeSession
+    from core.agent_modes import (
+        ModeRegistry,
+        ModeSession,
+    )
 
     mode_registry = ModeRegistry(
         root / "config" / "modes.json"
     )
-    mode_session = ModeSession(mode_registry)
+    mode_session = ModeSession(
+        mode_registry
+    )
 
-    from ui.startup_screen import render_startup_screen
+    orchestrator = build_orchestrator(
+        root=root,
+        model=model,
+        log_file=log_file,
+        system_prompt=system_prompt,
+        mode_session=mode_session,
+    )
+    context = orchestrator.context
+
+    from ui.startup_screen import (
+        render_startup_screen,
+    )
 
     render_startup_screen(
         version=VERSION,
-        model=model,
+        model=context.model,
         internet_status=INTERNET,
         status="Ready",
-        log_path=log_file,
+        log_path=context.log_file,
     )
 
-    ready, details = check_ollama_ready(model)
+    ready, details = check_ollama_ready(
+        context.model
+    )
+
     if not ready:
         print(details)
         print("")
-        print("VEGA will stay in CLI mode. Commands like /docs, /model, /status, /doctor, /help, and /exit are available.")
-        append_log(log_file, "WARNING", details)
-
-    memory_warning_errors: set[str] = set()
+        print(
+            "VEGA will stay in CLI mode. "
+            "Commands like /docs, /model, "
+            "/status, /doctor, /help, and "
+            "/exit are available."
+        )
+        append_log(
+            context.log_file,
+            "WARNING",
+            details,
+        )
 
     while True:
         try:
-            user_input = input("VEGA> ").strip()
-            # [VEGA_DOCS_COMMANDS_CALL_START]
-            _vega_input = str(user_input).strip()
-            _vega_input_lower = _vega_input.lower()
-            if _vega_input_lower == '/docs' or _vega_input_lower.startswith('/docs '):
-                try:
-                    import sys as _vega_sys
-                    from pathlib import Path as _VegaPath
-                    _vega_project_root = _VegaPath(__file__).resolve().parents[1]
-                    if str(_vega_project_root) not in _vega_sys.path:
-                        _vega_sys.path.insert(0, str(_vega_project_root))
-                    from rag.commands import handle_docs_command as _vega_handle_docs_command
-                    _vega_handle_docs_command(str(user_input), _vega_project_root)
-                except Exception as _vega_docs_error:
-                    print(f'VEGA docs command error: {_vega_docs_error}')
-                continue
-            # [VEGA_DOCS_COMMANDS_CALL_END]
+            raw_input = input("VEGA> ")
         except (EOFError, KeyboardInterrupt):
             print("\nBye.")
-            append_log(log_file, "SYSTEM", "Session interrupted.")
+            append_log(
+                context.log_file,
+                "SYSTEM",
+                "Session interrupted.",
+            )
             return 0
 
-        if not user_input:
+        result = orchestrator.process(
+            raw_input
+        )
+
+        if result.kind is OrchestrationKind.EMPTY:
             continue
 
-        append_log(log_file, "USER", user_input)
+        append_log(
+            context.log_file,
+            "USER",
+            result.intent.normalized_text,
+        )
 
-        if user_input.startswith("/"):
-            if not handle_command(user_input, root, log_file, model, mode_session):
+        if (
+            result.kind
+            is OrchestrationKind.COMMAND
+        ):
+            route = result.command_route
+
+            if route is None:
+                raise RuntimeError(
+                    "Command result has no route."
+                )
+
+            if route.target is CommandTarget.DOCS:
+                dispatch_docs_command(
+                    route.normalized_command,
+                    context.project_root,
+                )
+                append_log(
+                    context.log_file,
+                    "COMMAND",
+                    route.normalized_command,
+                )
+                continue
+
+            keep_running = handle_command(
+                route.normalized_command,
+                context.project_root,
+                context.log_file,
+                context.model,
+                context.mode_session,
+            )
+
+            if not keep_running:
                 return 0
+
             continue
 
-        model = load_model_name(root)
-        try:
-            from core.model_router import get_model_status
+        if (
+            result.kind
+            is OrchestrationKind.WAITING_CONFIRMATION
+        ):
+            print(result.message)
+            append_log(
+                context.log_file,
+                "WARNING",
+                result.message,
+            )
+            continue
 
-            model_status = get_model_status(root)
+        if (
+            result.kind
+            is OrchestrationKind.CONFIRMATION
+        ):
+            confirmation = (
+                result.confirmation_result
+            )
+
+            if confirmation is None:
+                raise RuntimeError(
+                    "Confirmation result is missing."
+                )
+
+            if confirmation.confirmed:
+                message = (
+                    "Action confirmed: "
+                    f"{confirmation.request.action_name}"
+                )
+            else:
+                message = (
+                    "Action cancelled: "
+                    f"{confirmation.request.action_name}"
+                )
+
+            print(message)
+            append_log(
+                context.log_file,
+                "CONFIRMATION",
+                message,
+            )
+            continue
+
+        if result.kind is not OrchestrationKind.CHAT:
+            raise RuntimeError(
+                "Unsupported orchestration result: "
+                f"{result.kind!r}."
+            )
+
+        model = load_model_name(
+            context.project_root
+        )
+        context.set_model(model)
+
+        try:
+            from core.model_router import (
+                get_model_status,
+            )
+
+            model_status = get_model_status(
+                context.project_root
+            )
         except Exception:
-            model_status = {"model_installed": True, "current_model": model}
+            model_status = {
+                "model_installed": True,
+                "current_model": context.model,
+            }
 
-        if not model_status.get("model_installed", True):
-            response = model_unavailable_chat_message(str(model_status.get("current_model", model)))
+        if not model_status.get(
+            "model_installed",
+            True,
+        ):
+            response = model_unavailable_chat_message(
+                str(
+                    model_status.get(
+                        "current_model",
+                        context.model,
+                    )
+                )
+            )
             print(response)
-            append_log(log_file, "ERROR", response)
+            append_log(
+                context.log_file,
+                "ERROR",
+                response,
+            )
             continue
 
-        messages.append({"role": "user", "content": user_input})
-        request_messages = [dict(message) for message in messages]
-        try:
-            from memory.project_memory import build_memory_context
-            memory_result = build_memory_context(root)
-        except Exception as exc:
-            memory_result = {"ok": False, "error": str(exc), "data": None}
+        context.append_message(
+            "user",
+            result.intent.normalized_text,
+        )
 
-        if memory_result["ok"] and memory_result["data"]["context"]:
-            request_messages[0]["content"] = system_prompt + "\n\n" + memory_result["data"]["context"]
+        request_messages = (
+            context.copy_messages()
+        )
+
+        try:
+            from memory.project_memory import (
+                build_memory_context,
+            )
+
+            memory_result = build_memory_context(
+                context.project_root
+            )
+        except Exception as exc:
+            memory_result = {
+                "ok": False,
+                "error": str(exc),
+                "data": None,
+            }
+
+        if (
+            memory_result["ok"]
+            and memory_result["data"]["context"]
+        ):
+            request_messages[0]["content"] = (
+                context.system_prompt
+                + "\n\n"
+                + memory_result["data"]["context"]
+            )
         elif not memory_result["ok"]:
-            error = str(memory_result.get("error") or "Unknown Project Memory error.")
-            if error not in memory_warning_errors:
-                warning = f"Project Memory warning: {error} Chat will continue without memory."
+            error = str(
+                memory_result.get("error")
+                or (
+                    "Unknown Project Memory "
+                    "error."
+                )
+            )
+
+            if (
+                error
+                not in context.memory_warning_errors
+            ):
+                warning = (
+                    f"Project Memory warning: "
+                    f"{error} "
+                    "Chat will continue without "
+                    "memory."
+                )
                 print(warning)
-                append_log(log_file, "WARNING", warning)
-                memory_warning_errors.add(error)
+                append_log(
+                    context.log_file,
+                    "WARNING",
+                    warning,
+                )
+                context.memory_warning_errors.add(
+                    error
+                )
 
         request_messages[0]["content"] += (
             "\n\n"
-            + mode_session.active_mode.build_instruction()
+            + context.mode_session.active_mode
+            .build_instruction()
         )
 
-        ok, response = call_ollama_chat(model, request_messages)
+        ok, response = call_ollama_chat(
+            context.model,
+            request_messages,
+        )
+
         label = "VEGA" if ok else "ERROR"
+
         print(response)
-        append_log(log_file, label, response)
+        append_log(
+            context.log_file,
+            label,
+            response,
+        )
+
         if ok:
-            messages.append({"role": "assistant", "content": response})
+            context.append_message(
+                "assistant",
+                response,
+            )
 
     return 0
 

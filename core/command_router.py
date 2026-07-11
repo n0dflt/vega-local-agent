@@ -17,6 +17,7 @@ class CommandTarget(str, Enum):
     HELP = "help"
     STATUS = "status"
     DOCTOR = "doctor"
+    DOCS = "docs"
     WORKSPACE = "workspace"
     MODEL = "model"
     PROJECT = "project"
@@ -66,6 +67,7 @@ _DEFAULT_ROUTES = MappingProxyType(
         "/help": CommandTarget.HELP,
         "/status": CommandTarget.STATUS,
         "/doctor": CommandTarget.DOCTOR,
+        "/docs": CommandTarget.DOCS,
         "/workspace": CommandTarget.WORKSPACE,
         "/model": CommandTarget.MODEL,
         "/project": CommandTarget.PROJECT,

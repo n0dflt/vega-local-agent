@@ -49,7 +49,10 @@ class AgentOrchestratorTests(unittest.TestCase):
             1,
         )
 
-    def test_chat_input_is_added_to_history(self) -> None:
+
+    def test_chat_input_is_routed_without_history_mutation(
+        self,
+    ) -> None:
         result = self.orchestrator.process(
             "  Analyze the project  "
         )
@@ -58,13 +61,16 @@ class AgentOrchestratorTests(unittest.TestCase):
             result.kind,
             OrchestrationKind.CHAT,
         )
-        self.assertTrue(result.should_call_model)
+        self.assertTrue(
+            result.should_call_model
+        )
         self.assertEqual(
-            self.context.messages[-1],
-            {
-                "role": "user",
-                "content": "Analyze the project",
-            },
+            result.intent.normalized_text,
+            "Analyze the project",
+        )
+        self.assertEqual(
+            len(self.context.messages),
+            1,
         )
 
     def test_command_is_routed_without_chat_mutation(self) -> None:
@@ -200,7 +206,10 @@ class AgentOrchestratorTests(unittest.TestCase):
             self.context.confirmation_pending
         )
 
-    def test_confirm_without_pending_action_is_chat(self) -> None:
+
+    def test_confirm_without_pending_action_is_chat(
+        self,
+    ) -> None:
         result = self.orchestrator.process(
             "CONFIRM"
         )
@@ -210,8 +219,12 @@ class AgentOrchestratorTests(unittest.TestCase):
             OrchestrationKind.CHAT,
         )
         self.assertEqual(
-            self.context.messages[-1]["content"],
+            result.intent.normalized_text,
             "CONFIRM",
+        )
+        self.assertEqual(
+            len(self.context.messages),
+            1,
         )
 
     def test_invalid_context_is_rejected(self) -> None:

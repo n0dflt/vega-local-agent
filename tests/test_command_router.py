@@ -96,12 +96,28 @@ class CommandRouterTests(unittest.TestCase):
         self.assertFalse(route.is_known)
         self.assertFalse(route.is_exit)
 
+
+    def test_docs_command_routes_to_docs(self) -> None:
+        route = self.route_command(
+            "/docs search architecture"
+        )
+
+        self.assertEqual(
+            route.target,
+            CommandTarget.DOCS,
+        )
+        self.assertEqual(
+            route.command_arguments,
+            "search architecture",
+        )
+
     def test_all_current_command_groups_are_registered(self) -> None:
         expected_commands = {
             "/about",
             "/help",
             "/status",
             "/doctor",
+            "/docs",
             "/workspace",
             "/model",
             "/project",

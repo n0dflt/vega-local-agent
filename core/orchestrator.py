@@ -139,11 +139,6 @@ class AgentOrchestrator:
             )
 
         if intent.kind is IntentKind.CHAT:
-            self.context.append_message(
-                "user",
-                intent.normalized_text,
-            )
-
             return OrchestrationResult(
                 kind=OrchestrationKind.CHAT,
                 intent=intent,
