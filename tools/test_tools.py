@@ -47,7 +47,10 @@ TEST_GROUPS: dict[str, dict[str, str]] = {
         "command_id": "tests-web-cli",
         "description": "Run Controlled Internet Layer CLI routing tests.",
     },
-
+    "docs": {
+        "command_id": "tests-docs",
+        "description": "Run all Documentation Builder tests.",
+    },
 }
 
 

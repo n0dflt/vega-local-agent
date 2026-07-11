@@ -1,3 +1,35 @@
+# Changelog
+
+## v1.10.0 - Documentation Builder
+
+Added:
+
+* Documentation policy in `config/documentation_policy.json`.
+* Managed documentation validation for architecture, commands, and security documents.
+* `/docgen`, `/docgen status`, `/docgen check`, and `/docgen build` commands.
+* Safe generated documentation blocks with explicit start and end markers.
+* Pending documentation patch generation through Patch Tools.
+* Documentation status and version-reference checks.
+* `docs/security.md`.
+* Registered Documentation Builder tools.
+* Predefined `/test docs` test group.
+* Unit, command-handler, CLI-routing, and builder tests.
+
+Changed:
+
+* Test Runner expanded from eight to nine predefined groups.
+* CLI help and available command output include Documentation Builder.
+* README command reference and project status updated.
+* Current version updated from v1.9.0 to v1.10.0.
+
+Security:
+
+* Missing managed documents are not created automatically.
+* Documentation patches are never applied automatically.
+* Builds are restricted to the active VEGA project root.
+* Manual documents are excluded from generated updates.
+* Patch application remains a separate operation requiring the exact `CONFIRM` token.
+
 ## v1.9.0 - Controlled Internet Layer
 
 Added:
@@ -30,7 +62,7 @@ Security:
 * URL queries and fragments are excluded from audit logs.
 * Automatic redirects are disabled to reduce SSRF risk.
 
-# Changelog
+
 
 ## v1.0.0 - Stable Local Agent Release
 
@@ -139,4 +171,3 @@ Initial Documents / RAG scaffold.
 ## v0.2.x
 
 Stable local CLI coding-agent foundation.
-

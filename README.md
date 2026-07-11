@@ -4,7 +4,7 @@ VEGA is a local project coding-agent for working with code, project structure, l
 
 ## Current version
 
-v1.9.0
+v1.10.0
 
 ## Features
 
@@ -26,6 +26,7 @@ v1.9.0
 * Local Project Memory with explicit storage and bounded model context
 * Safe Terminal Tools with predefined validation commands
 * Controlled Internet Layer with explicit session-level enablement and safe HTTPS fetching
+* Documentation Builder with policy validation, managed documents, and pending patch generation
 
 ## Requirements
 
@@ -100,6 +101,26 @@ python scripts\vega.py
 /task review
 /task close
 /task clear
+/test
+/test list
+/test all
+/test terminal
+/test terminal-tools
+/test terminal-commands
+/test web
+/test web-tools
+/test web-commands
+/test web-cli
+/test docs
+/internet
+/internet status
+/internet on
+/internet off
+/web fetch <https-url>
+/docgen
+/docgen status
+/docgen check
+/docgen build
 /exit
 /bye
 /q
@@ -473,18 +494,66 @@ Query parameters and fragments are removed before audit logging.
 v1.9.0 does not include a search provider, browser automation,
 form submission, authentication, or file downloads.
 
+## VEGA v1.10.0 - Documentation Builder
+
+Documentation Builder validates the configured project documentation and
+creates controlled pending patches for managed documents.
+
+```text
+/docgen
+/docgen status
+/docgen check
+/docgen build
+```
+
+The documentation policy is stored in:
+
+```text
+config/documentation_policy.json
+```
+
+Managed documents:
+
+```text
+docs/architecture.md
+docs/commands.md
+docs/security.md
+```
+
+`/docgen build` does not modify these files directly. It creates pending
+Patch Tools proposals that must be inspected and applied separately with the
+exact `CONFIRM` token.
+
+Manual documents remain under direct human control:
+
+```text
+README.md
+CHANGELOG.md
+docs/roadmap.md
+```
+
+Documentation Builder does not create missing files automatically, apply
+patches automatically, rewrite release history, or bypass the active project
+root.
+
+The predefined test group is:
+
+```text
+/test docs
+```
+
 ## Project status
 
 Current stable checkpoint:
 
 ```text
-v1.9.0 - Controlled Internet Layer with explicit enablement,
-safe HTTPS fetching, SSRF protection, bounded responses,
-and sanitized audit logs.
+v1.10.0 - Documentation Builder with policy validation,
+managed documentation snapshots, pending Patch Tools proposals,
+CLI integration, and isolated automated tests.
 ```
 
 Next planned stage:
 
 ```text
-v1.10.0 - Documentation Builder.
+v2.0.0 - Agent Orchestration Foundation.
 ```

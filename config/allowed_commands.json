@@ -164,6 +164,23 @@
       ],
       "timeout_seconds": 180,
       "enabled": true
+    },
+    {
+      "id": "tests-docs",
+      "description": "Run all Documentation Builder tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_doc_tools.py",
+        "tests/test_doc_commands.py",
+        "tests/test_doc_cli.py",
+        "tests/test_doc_builders.py"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
     }
   ]
 }

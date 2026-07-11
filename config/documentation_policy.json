@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "managed_documents": [
+    {
+      "id": "architecture",
+      "path": "docs/architecture.md",
+      "generator": "architecture",
+      "required": true
+    },
+    {
+      "id": "commands",
+      "path": "docs/commands.md",
+      "generator": "commands",
+      "required": true
+    },
+    {
+      "id": "security",
+      "path": "docs/security.md",
+      "generator": "security",
+      "required": true
+    }
+  ],
+  "manual_documents": [
+    {
+      "id": "readme",
+      "path": "README.md",
+      "required": true,
+      "check_version": true
+    },
+    {
+      "id": "changelog",
+      "path": "CHANGELOG.md",
+      "required": true,
+      "check_version": true
+    },
+    {
+      "id": "roadmap",
+      "path": "docs/roadmap.md",
+      "required": true,
+      "check_version": false
+    }
+  ],
+  "build_policy": {
+    "create_missing_files": false,
+    "use_patch_tools": true,
+    "apply_automatically": false,
+    "require_confirm_token": true
+  },
+  "limits": {
+    "max_document_chars": 100000,
+    "max_generated_documents": 10
+  }
+}

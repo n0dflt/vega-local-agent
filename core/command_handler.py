@@ -112,6 +112,14 @@ Restrictions:
   binary content is blocked"""
 
 
+DOCGEN_HELP = """Documentation Builder commands:
+  /docgen          Show Documentation Builder help
+  /docgen status   Show configured documentation status
+  /docgen check    Check required documentation and version references
+  /docgen build    Create pending patches for managed documentation
+
+Documentation Builder does not apply documentation changes automatically."""
+
 def _clean_cli_token(value: str) -> str:
     return value.strip().strip('"').strip("'")
 
@@ -561,6 +569,189 @@ def handle_web_command(
     )
 
     return "\n".join(lines)
+
+def handle_docgen_command(
+    command: str,
+    project_root=None,
+) -> str:
+    """Handle safe Documentation Builder commands."""
+
+    from tools.doc_builders import build_documentation
+    from tools.doc_tools import (
+        check_documentation,
+        get_documentation_status,
+    )
+
+    try:
+        parts = shlex.split(command, posix=False)
+    except ValueError as exc:
+        return f"Documentation command error: {exc}"
+
+    parts = [
+        _clean_cli_token(part)
+        for part in parts
+    ]
+
+    if len(parts) == 1:
+        return DOCGEN_HELP
+
+    if len(parts) != 2:
+        return DOCGEN_HELP
+
+    action = parts[1].strip().lower()
+
+    if action == "status":
+        result = get_documentation_status(project_root)
+
+        if not result["ok"]:
+            return (
+                "Documentation command error: "
+                f"{result['error']}"
+            )
+
+        data = result["data"]
+
+        lines = [
+            "Documentation Builder status",
+            f"Policy: {data['policy_path']}",
+            f"Project version: {data['version']}",
+            f"Managed documents: {data['managed_count']}",
+            f"Manual documents: {data['manual_count']}",
+            "",
+            "Documents:",
+        ]
+
+        for document in data["documents"]:
+            state = (
+                "OK"
+                if document["exists"]
+                else "MISSING"
+            )
+
+            if document["version_current"] is True:
+                version_state = "current"
+            elif document["version_current"] is False:
+                version_state = "stale"
+            else:
+                version_state = "not checked"
+
+            lines.append(
+                f"  [{state}] {document['id']}: "
+                f"{document['path']} "
+                f"({document['kind']}, "
+                f"version: {version_state})"
+            )
+
+        return "\n".join(lines)
+
+    if action == "check":
+        result = check_documentation(project_root)
+
+        if not result["ok"]:
+            return (
+                "Documentation command error: "
+                f"{result['error']}"
+            )
+
+        data = result["data"]
+
+        lines = [
+            "Documentation check",
+            (
+                "Status: PASS"
+                if data["passed"]
+                else "Status: FAIL"
+            ),
+            f"Project version: {data['version']}",
+            f"Errors: {data['error_count']}",
+        ]
+
+        if not data["issues"]:
+            lines.extend(
+                [
+                    "",
+                    "No documentation issues found.",
+                ]
+            )
+        else:
+            lines.extend(["", "Issues:"])
+
+            for issue in data["issues"]:
+                lines.append(
+                    f"  [{issue['severity'].upper()}] "
+                    f"{issue['path']}: "
+                    f"{issue['message']}"
+                )
+
+        return "\n".join(lines)
+
+    if action == "build":
+        result = build_documentation(project_root)
+
+        if not result["ok"]:
+            return (
+                "Documentation command error: "
+                f"{result['error']}"
+            )
+
+        data = result["data"]
+
+        lines = [
+            "Documentation build",
+            (
+                "Status: PASS"
+                if data["passed"]
+                else "Status: FAIL"
+            ),
+            f"Project version: {data['version']}",
+            (
+                "Pending patches created: "
+                f"{data['created_count']}"
+            ),
+            (
+                "Skipped documents: "
+                f"{data['skipped_count']}"
+            ),
+            f"Errors: {data['error_count']}",
+            "Automatic apply: NO",
+        ]
+
+        if data["created"]:
+            lines.extend(["", "Created patches:"])
+
+            for item in data["created"]:
+                lines.append(
+                    f"  [PENDING] "
+                    f"{item['document_id']}: "
+                    f"{item['path']} -> "
+                    f"{item['patch_id']}"
+                )
+
+        if data["skipped"]:
+            lines.extend(["", "Skipped documents:"])
+
+            for item in data["skipped"]:
+                lines.append(
+                    f"  [SKIPPED] "
+                    f"{item['document_id']}: "
+                    f"{item['path']} "
+                    f"({item['reason']})"
+                )
+
+        if data["errors"]:
+            lines.extend(["", "Build errors:"])
+
+            for item in data["errors"]:
+                lines.append(
+                    f"  [ERROR] "
+                    f"{item['document_id']}: "
+                    f"{item['path']}: "
+                    f"{item['message']}"
+                )
+
+        return "\n".join(lines)
+
+    return DOCGEN_HELP
 
 
 def tools_list_text() -> str:

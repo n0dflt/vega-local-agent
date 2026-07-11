@@ -148,3 +148,59 @@ VEGA не должна:
 - усложнять проект без причины;
 - добавлять GUI раньше стабильной базы;
 - соглашаться с плохой идеей только ради вежливости.
+
+<!-- VEGA DOCGEN START: architecture -->
+## Generated project snapshot
+
+Project version: `v1.10.0`
+
+This section is generated from the current project tree.
+
+### Top-level directories
+
+- `config/`
+- `core/`
+- `data/`
+- `docs/`
+- `logs/`
+- `memory/`
+- `ollama/`
+- `prompts/`
+- `rag/`
+- `scripts/`
+- `tests/`
+- `tools/`
+- `ui/`
+- `web_demo/`
+
+### Core modules
+
+- `core/command_handler.py`
+- `core/internet_state.py`
+- `core/model_router.py`
+- `core/network_safety.py`
+- `core/review_gate.py`
+- `core/safety.py`
+- `core/task_manager.py`
+- `core/task_state.py`
+
+### Tool modules
+
+- `tools/doc_builders.py`
+- `tools/doc_tools.py`
+- `tools/file_tools.py`
+- `tools/git_tools.py`
+- `tools/patch_tools.py`
+- `tools/registry.py`
+- `tools/terminal_tools.py`
+- `tools/test_tools.py`
+- `tools/web_tools.py`
+
+### Dependency direction
+
+```text
+scripts -> core -> tools -> policies and project data
+```
+
+Generated documentation changes are proposed through Patch Tools and are not applied automatically.
+<!-- VEGA DOCGEN END: architecture -->

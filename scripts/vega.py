@@ -169,6 +169,10 @@ def help_text() -> str:
         "  /internet on           Enable internet for this VEGA process.",
         "  /internet off          Disable internet for this VEGA process.",
         "  /web fetch <https-url> Fetch one bounded text resource.",
+    "  /docgen                Show Documentation Builder help.",
+    "  /docgen status         Show project documentation status.",
+    "  /docgen check          Check required project documentation.",
+        "  /docgen build          Create pending documentation patches.",
         "",
         "Task Console:",
         "/workspace              Show workspace state",
@@ -178,6 +182,9 @@ def help_text() -> str:
         "More:",
         "  /model fast | /model code | /model docs | /model deep",
         "  /project | /project status | /log | /clear",
+    "  /docgen                Show Documentation Builder help.",
+        "  /docgen status         Show project documentation status.",
+        "  /docgen check          Check required project documentation.",
     ])
 
 
@@ -467,6 +474,7 @@ def print_available_commands() -> None:
     print("/test")
     print("/internet")
     print("/web")
+    print("/docgen")
     print("/exit")
 
 
@@ -856,6 +864,10 @@ def handle_command(command: str, root: Path, log_file: Path, model: str) -> bool
     elif lower == "/web" or lower.startswith("/web "):
         from core.command_handler import handle_web_command
         print(handle_web_command(command, root))
+    elif lower == "/docgen" or lower.startswith("/docgen "):
+        from core.command_handler import handle_docgen_command
+
+        print(handle_docgen_command(command, root))
     elif lower in {"/exit", "/bye", "/q"}:
         print("Bye.")
         append_log(log_file, "SYSTEM", "Session closed by user.")

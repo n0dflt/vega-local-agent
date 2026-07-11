@@ -23,13 +23,14 @@ class TestToolsTests(unittest.TestCase):
                 {"id": "tests-web-tools", "enabled": True},
                 {"id": "tests-web-commands", "enabled": True},
                 {"id": "tests-web-cli", "enabled": True},
+                {"id": "tests-docs", "enabled": True},
             ],
         }
 
         result = list_test_groups()
 
         self.assertTrue(result["ok"], result["error"])
-        self.assertEqual(len(result["data"]), 8)
+        self.assertEqual(len(result["data"]), 9)
         self.assertTrue(
             all(item["available"] for item in result["data"])
         )
@@ -114,6 +115,42 @@ class TestToolsTests(unittest.TestCase):
         self.assertIn(
             "18 passed",
             result["data"]["stdout"],
+        )
+
+    @patch("tools.test_tools.run_allowed_command")
+    def test_documentation_group_uses_allowed_command(
+        self,
+        run_allowed_command,
+    ):
+        run_allowed_command.return_value = {
+            "ok": True,
+            "error": None,
+            "data": {
+                "command_id": "tests-docs",
+                "stdout": "24 passed\n",
+                "stderr": "",
+                "returncode": 0,
+                "timed_out": False,
+                "truncated": False,
+                "duration_ms": 100,
+                "warning": None,
+            },
+        }
+
+        result = run_test_group("docs")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["data"]["group_id"],
+            "docs",
+        )
+        self.assertEqual(
+            result["data"]["command_id"],
+            "tests-docs",
+        )
+        run_allowed_command.assert_called_once_with(
+            "tests-docs",
+            None,
         )
 
     @patch("tools.test_tools.run_allowed_command")
