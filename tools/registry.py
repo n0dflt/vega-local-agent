@@ -1,4 +1,4 @@
-﻿"""Registry of tools available to VEGA."""
+"""Registry of tools available to VEGA."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ from tools.patch_tools import (
 )
 from memory.project_memory import add_memory, get_memory_stats, list_memories, search_memories
 from tools.terminal_tools import list_allowed_commands, run_allowed_command
+from tools.test_tools import list_test_groups, run_test_group
 
 
 TOOL_REGISTRY = {
@@ -51,6 +52,8 @@ TOOL_REGISTRY = {
     "memory_stats": get_memory_stats,
     "terminal_list": list_allowed_commands,
     "terminal_run": run_allowed_command,
+    "test_list": list_test_groups,
+    "test_run": run_test_group,
 }
 
 

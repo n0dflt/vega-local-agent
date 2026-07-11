@@ -1,10 +1,10 @@
-# VEGA
+﻿# VEGA
 
 VEGA is a local project coding-agent for working with code, project structure, local tasks, and local documents.
 
 ## Current version
 
-v1.7.0
+v1.8.0
 
 ## Features
 
@@ -414,6 +414,20 @@ logs\terminal\terminal_commands.jsonl
 Editing the JSON policy does not bypass built-in executable and path validation.
 Dangerous executables, absolute paths, parent traversal, UNC paths, symlink escapes,
 and additional CLI arguments remain blocked.
+
+## VEGA v1.8.0 — Test Runner
+
+Test Runner executes predefined pytest groups through the Safe Terminal Tools
+layer. Arbitrary pytest arguments, custom test paths, and shell commands are
+not accepted.
+
+```text
+/test
+/test list
+/test all
+/test terminal
+/test terminal-tools
+/test terminal-commands
 
 ## Project status
 

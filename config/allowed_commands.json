@@ -1,4 +1,4 @@
-{
+﻿{
   "schema_version": 1,
   "default_timeout_seconds": 60,
   "max_output_chars": 50000,
@@ -13,14 +13,72 @@
     {
       "id": "compile",
       "description": "Compile VEGA Python modules.",
-      "argv": ["python", "-m", "compileall", "core", "scripts", "tools", "memory", "tests"],
+      "argv": [
+        "python",
+        "-m",
+        "compileall",
+        "core",
+        "scripts",
+        "tools",
+        "memory",
+        "tests"
+      ],
       "timeout_seconds": 120,
       "enabled": true
     },
     {
       "id": "tests",
-      "description": "Run VEGA unit tests.",
-      "argv": ["python", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+      "description": "Run all VEGA tests with pytest.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
+    },
+    {
+      "id": "tests-terminal",
+      "description": "Run all Terminal Tools tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_terminal_tools.py",
+        "tests/test_terminal_commands.py"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
+    },
+    {
+      "id": "tests-terminal-tools",
+      "description": "Run Terminal Tools unit tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_terminal_tools.py"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
+    },
+    {
+      "id": "tests-terminal-commands",
+      "description": "Run Terminal command handler tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_terminal_commands.py"
+      ],
       "timeout_seconds": 180,
       "enabled": true
     },

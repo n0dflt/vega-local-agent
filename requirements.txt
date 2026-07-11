@@ -7,3 +7,4 @@ requests
 # Install these only if you need PDF/DOCX document reading.
 pypdf
 python-docx
+pytest>=9.1,<10

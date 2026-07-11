@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """VEGA CLI shell over the Ollama HTTP chat API."""
 
 from __future__ import annotations
@@ -150,6 +150,9 @@ def help_text() -> str:
         "  /run                   Show Safe Terminal Tools help.",
         "  /run list              List predefined validation commands.",
         "  /run <command-id>      Run one predefined validation command.",
+        "  /test                  Run all VEGA tests.",
+        "  /test list             List predefined test groups.",
+        "  /test <group-id>       Run one predefined test group.",
         "",
         "Task Console:",
         "/workspace              Show workspace state",
@@ -445,6 +448,7 @@ def print_available_commands() -> None:
     print("/file")
     print("/tools list")
     print("/run")
+    print("/test")
     print("/exit")
 
 
@@ -825,6 +829,9 @@ def handle_command(command: str, root: Path, log_file: Path, model: str) -> bool
     elif lower == "/run" or lower.startswith("/run "):
         from core.command_handler import handle_terminal_command
         print(handle_terminal_command(command, root))
+    elif lower == "/test" or lower.startswith("/test "):
+        from core.command_handler import handle_test_command
+        print(handle_test_command(command, root))
     elif lower in {"/exit", "/bye", "/q"}:
         print("Bye.")
         append_log(log_file, "SYSTEM", "Session closed by user.")
@@ -942,5 +949,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

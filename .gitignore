@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -54,3 +54,4 @@ data/documents/*
 # Extra Python artifacts
 .Python
 .env.local
+logs/terminal/

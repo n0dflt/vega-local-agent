@@ -1,4 +1,4 @@
-﻿"""Command handlers shared by the VEGA CLI."""
+"""Command handlers shared by the VEGA CLI."""
 
 from __future__ import annotations
 
@@ -74,6 +74,20 @@ TERMINAL_HELP = """Terminal commands:
 
 Only predefined safe validation commands can be executed.
 Arbitrary shell commands are not supported."""
+
+TEST_HELP = """Test Runner commands:
+  /test                     Run all VEGA tests
+  /test list                List available test groups
+  /test <group_id>          Run one predefined test group
+
+Examples:
+  /test
+  /test terminal
+  /test terminal-tools
+  /test terminal-commands
+
+Arbitrary pytest arguments are not supported."""
+
 
 def _clean_cli_token(value: str) -> str:
     return value.strip().strip('"').strip("'")
@@ -332,6 +346,84 @@ def handle_terminal_command(command: str, project_root=None) -> str:
         lines.extend(["", "Errors:", data["stderr"].rstrip()])
     if data.get("warning"):
         lines.extend(["", data["warning"]])
+    return "\n".join(lines)
+
+
+def handle_test_command(command: str, project_root=None) -> str:
+    from tools.test_tools import list_test_groups, run_test_group
+
+    try:
+        parts = shlex.split(command, posix=False)
+    except ValueError as exc:
+        return f"Test command error: {exc}"
+
+    parts = [_clean_cli_token(part) for part in parts]
+
+    if len(parts) == 1:
+        group_id = "all"
+    elif len(parts) == 2:
+        argument = parts[1].strip().lower()
+
+        if argument == "list":
+            result = list_test_groups(project_root)
+
+            if not result["ok"]:
+                return f"Test command error: {result['error']}"
+
+            lines = ["Available test groups:"]
+
+            for item in result["data"]:
+                if not item["available"]:
+                    state = "unavailable"
+                elif not item["enabled"]:
+                    state = "disabled"
+                else:
+                    state = "enabled"
+
+                lines.append(
+                    f"  {item['id']:<20} "
+                    f"{item['description']} ({state})"
+                )
+
+            return "\n".join(lines)
+
+        group_id = argument
+    else:
+        return (
+            "Test command error: Exactly one test group is allowed.\n"
+            "Run /test list to see available groups."
+        )
+
+    result = run_test_group(group_id, project_root)
+
+    if result["data"] is None:
+        return (
+            f"Test command error: {result['error']}\n"
+            "Run /test list to see available groups."
+        )
+
+    data = result["data"]
+
+    lines = [
+        f"Test group: {data['group_id']}",
+        f"Description: {data['description']}",
+        f"Status: {'PASS' if result['ok'] else 'FAIL'}",
+        f"Exit code: {data['returncode']}",
+        f"Duration: {data['duration_ms']} ms",
+    ]
+
+    if data.get("timed_out"):
+        lines.append("Timed out: yes")
+
+    if data["stdout"]:
+        lines.extend(["", data["stdout"].rstrip()])
+
+    if data["stderr"]:
+        lines.extend(["", "Errors:", data["stderr"].rstrip()])
+
+    if data.get("warning"):
+        lines.extend(["", data["warning"]])
+
     return "\n".join(lines)
 
 
