@@ -85,8 +85,31 @@ Examples:
   /test terminal
   /test terminal-tools
   /test terminal-commands
+  /test web
+  /test web-tools
+  /test web-commands
+  /test web-cli
 
 Arbitrary pytest arguments are not supported."""
+
+
+INTERNET_HELP = """Internet access commands:
+  /internet             Show current internet state
+  /internet status      Show current internet state
+  /internet on          Enable internet for this VEGA process
+  /internet off         Disable internet for this VEGA process
+
+Internet access is always OFF when a new VEGA process starts."""
+
+
+WEB_HELP = """Controlled web commands:
+  /web fetch <https-url>  Fetch one bounded text resource
+
+Restrictions:
+  HTTPS only
+  redirects are blocked
+  local and private addresses are blocked
+  binary content is blocked"""
 
 
 def _clean_cli_token(value: str) -> str:
@@ -423,6 +446,119 @@ def handle_test_command(command: str, project_root=None) -> str:
 
     if data.get("warning"):
         lines.extend(["", data["warning"]])
+
+    return "\n".join(lines)
+
+
+def handle_internet_command(command: str) -> str:
+    from core.internet_state import (
+        is_internet_enabled,
+        set_internet_enabled,
+    )
+
+    try:
+        parts = shlex.split(command, posix=False)
+    except ValueError as exc:
+        return f"Internet command error: {exc}"
+
+    parts = [
+        _clean_cli_token(part)
+        for part in parts
+    ]
+
+    if len(parts) == 1:
+        enabled = is_internet_enabled()
+        return (
+            "Internet access: "
+            f"{'ON' if enabled else 'OFF'}."
+        )
+
+    if len(parts) != 2:
+        return INTERNET_HELP
+
+    action = parts[1].lower()
+
+    if action == "status":
+        enabled = is_internet_enabled()
+        return (
+            "Internet access: "
+            f"{'ON' if enabled else 'OFF'}."
+        )
+
+    if action == "on":
+        set_internet_enabled(True)
+        return (
+            "Internet access enabled for this "
+            "VEGA process."
+        )
+
+    if action == "off":
+        set_internet_enabled(False)
+        return (
+            "Internet access disabled for this "
+            "VEGA process."
+        )
+
+    return INTERNET_HELP
+
+
+def handle_web_command(
+    command: str,
+    project_root=None,
+) -> str:
+    from tools.web_tools import fetch_url
+
+    try:
+        parts = shlex.split(command, posix=False)
+    except ValueError as exc:
+        return f"Web command error: {exc}"
+
+    parts = [
+        _clean_cli_token(part)
+        for part in parts
+    ]
+
+    if (
+        len(parts) != 3
+        or parts[1].lower() != "fetch"
+    ):
+        return WEB_HELP
+
+    result = fetch_url(
+        parts[2],
+        project_root,
+    )
+
+    if not result["ok"]:
+        return f"Web command error: {result['error']}"
+
+    data = result["data"]
+
+    lines = [
+        f"URL: {data['url']}",
+        f"Status: {data['status_code']}",
+        f"Content-Type: {data['content_type']}",
+        f"Bytes read: {data['bytes_read']}",
+        (
+            "Truncated: "
+            f"{'yes' if data['truncated'] else 'no'}"
+        ),
+    ]
+
+    if data.get("warning"):
+        lines.extend(
+            [
+                "",
+                data["warning"],
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            data["text"],
+        ]
+    )
 
     return "\n".join(lines)
 

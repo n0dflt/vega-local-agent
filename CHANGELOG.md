@@ -1,4 +1,36 @@
-﻿# Changelog
+## v1.9.0 - Controlled Internet Layer
+
+Added:
+
+* Explicit `/internet`, `/internet status`, `/internet on`,
+  and `/internet off` commands.
+* Read-only `/web fetch <https-url>` command.
+* Strict network policy in `config/internet_policy.json`.
+* Process-local internet state that starts disabled.
+* HTTPS-only URL and standard-port validation.
+* Protection against localhost, private, reserved, and
+  other non-public network addresses.
+* Blocking of redirects, binary content, and oversized responses.
+* Bounded request timeout and response size.
+* Sanitized audit logging in `logs/web/web_requests.jsonl`.
+* Registered internet and web tools.
+* Four predefined web test groups.
+* Network, tool, command-handler, and CLI tests.
+
+Changed:
+
+* Runtime internet indicators now follow the current process state.
+* Test Runner expanded from four to eight predefined groups.
+* Current version updated from v1.8.0 to v1.9.0.
+
+Security:
+
+* Internet access remains OFF by default.
+* Proxy environment variables are ignored by controlled requests.
+* URL queries and fragments are excluded from audit logs.
+* Automatic redirects are disabled to reduce SSRF risk.
+
+# Changelog
 
 ## v1.0.0 - Stable Local Agent Release
 

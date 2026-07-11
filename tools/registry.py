@@ -27,6 +27,11 @@ from tools.patch_tools import (
 from memory.project_memory import add_memory, get_memory_stats, list_memories, search_memories
 from tools.terminal_tools import list_allowed_commands, run_allowed_command
 from tools.test_tools import list_test_groups, run_test_group
+from core.internet_state import (
+    is_internet_enabled,
+    set_internet_enabled,
+)
+from tools.web_tools import fetch_url
 
 
 TOOL_REGISTRY = {
@@ -54,6 +59,9 @@ TOOL_REGISTRY = {
     "terminal_run": run_allowed_command,
     "test_list": list_test_groups,
     "test_run": run_test_group,
+    "internet_status": is_internet_enabled,
+    "internet_set": set_internet_enabled,
+    "web_fetch": fetch_url,
 }
 
 

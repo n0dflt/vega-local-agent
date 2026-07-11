@@ -55,3 +55,6 @@ data/documents/*
 .Python
 .env.local
 logs/terminal/
+
+# Runtime web audit logs
+logs/web/*.jsonl

@@ -1,10 +1,10 @@
-﻿# VEGA
+# VEGA
 
 VEGA is a local project coding-agent for working with code, project structure, local tasks, and local documents.
 
 ## Current version
 
-v1.8.0
+v1.9.0
 
 ## Features
 
@@ -25,6 +25,7 @@ v1.8.0
 * Smoke-test script
 * Local Project Memory with explicit storage and bounded model context
 * Safe Terminal Tools with predefined validation commands
+* Controlled Internet Layer with explicit session-level enablement and safe HTTPS fetching
 
 ## Requirements
 
@@ -428,15 +429,62 @@ not accepted.
 /test terminal
 /test terminal-tools
 /test terminal-commands
+```
+
+## VEGA v1.9.0 - Controlled Internet Layer
+
+Controlled Internet Layer provides explicit, read-only HTTPS access.
+Internet access is disabled whenever a new VEGA process starts and
+must be enabled manually for the current process.
+
+```text
+/internet
+/internet status
+/internet on
+/internet off
+/web fetch <https-url>
+```
+
+Network policy is stored in:
+
+```text
+config\internet_policy.json
+```
+
+The network safety layer blocks:
+
+```text
+HTTP and non-standard ports
+localhost and non-public IP addresses
+credentials embedded in URLs
+automatic redirects
+binary responses
+oversized responses
+```
+
+Every request uses timeout and response-size limits.
+Request metadata is written to:
+
+```text
+logs\web\web_requests.jsonl
+```
+
+Query parameters and fragments are removed before audit logging.
+v1.9.0 does not include a search provider, browser automation,
+form submission, authentication, or file downloads.
 
 ## Project status
 
 Current stable checkpoint:
 
-v1.7.0 - Safe Terminal Tools with predefined validation commands.
+```text
+v1.9.0 - Controlled Internet Layer with explicit enablement,
+safe HTTPS fetching, SSRF protection, bounded responses,
+and sanitized audit logs.
+```
 
 Next planned stage:
 
 ```text
-v1.8.0 - Test Runner improvements and expanded automated coverage.
+v1.10.0 - Documentation Builder.
 ```

@@ -31,6 +31,23 @@ TEST_GROUPS: dict[str, dict[str, str]] = {
         "command_id": "tests-terminal-commands",
         "description": "Run Terminal command handler tests.",
     },
+    "web": {
+        "command_id": "tests-web",
+        "description": "Run all Controlled Internet Layer tests.",
+    },
+    "web-tools": {
+        "command_id": "tests-web-tools",
+        "description": "Run web safety and Web Tools unit tests.",
+    },
+    "web-commands": {
+        "command_id": "tests-web-commands",
+        "description": "Run internet and web command handler tests.",
+    },
+    "web-cli": {
+        "command_id": "tests-web-cli",
+        "description": "Run Controlled Internet Layer CLI routing tests.",
+    },
+
 }
 
 

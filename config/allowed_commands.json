@@ -1,4 +1,4 @@
-﻿{
+{
   "schema_version": 1,
   "default_timeout_seconds": 60,
   "max_output_chars": 50000,
@@ -6,7 +6,10 @@
     {
       "id": "python-version",
       "description": "Show the active Python version.",
-      "argv": ["python", "--version"],
+      "argv": [
+        "python",
+        "--version"
+      ],
       "timeout_seconds": 10,
       "enabled": true
     },
@@ -85,15 +88,81 @@
     {
       "id": "smoke",
       "description": "Run the VEGA smoke test.",
-      "argv": ["python", "scripts\\smoke_test.py"],
+      "argv": [
+        "python",
+        "scripts\\smoke_test.py"
+      ],
       "timeout_seconds": 60,
       "enabled": true
     },
     {
       "id": "identity",
       "description": "Run the VEGA identity check.",
-      "argv": ["python", "scripts\\check_identity.py"],
+      "argv": [
+        "python",
+        "scripts\\check_identity.py"
+      ],
       "timeout_seconds": 30,
+      "enabled": true
+    },
+    {
+      "id": "tests-web",
+      "description": "Run all Controlled Internet Layer tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_network_safety.py",
+        "tests/test_web_tools.py",
+        "tests/test_web_commands.py",
+        "tests/test_web_cli.py"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
+    },
+    {
+      "id": "tests-web-tools",
+      "description": "Run web safety and Web Tools unit tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_network_safety.py",
+        "tests/test_web_tools.py"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
+    },
+    {
+      "id": "tests-web-commands",
+      "description": "Run internet and web command handler tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_web_commands.py"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
+    },
+    {
+      "id": "tests-web-cli",
+      "description": "Run Controlled Internet Layer CLI routing tests.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/test_web_cli.py"
+      ],
+      "timeout_seconds": 180,
       "enabled": true
     }
   ]

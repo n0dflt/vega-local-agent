@@ -115,9 +115,21 @@ def banner(root: Path, model: str) -> str:
         render = getattr(module, "render_banner", None)
         if status_cls is None or render is None:
             return fallback_banner(model)
-        return render(status_cls(model=model, internet=False, version=VERSION))
+        return render(status_cls(model=model, internet=internet_enabled(), version=VERSION))
     except Exception:
         return fallback_banner(model)
+
+
+def internet_enabled() -> bool:
+    """Return the current process-level internet state."""
+    from core.internet_state import is_internet_enabled
+
+    return is_internet_enabled()
+
+
+def internet_label() -> str:
+    """Return a user-facing internet state label."""
+    return "ON" if internet_enabled() else "OFF"
 
 
 def help_text() -> str:
@@ -153,6 +165,10 @@ def help_text() -> str:
         "  /test                  Run all VEGA tests.",
         "  /test list             List predefined test groups.",
         "  /test <group-id>       Run one predefined test group.",
+        "  /internet              Show current internet state.",
+        "  /internet on           Enable internet for this VEGA process.",
+        "  /internet off          Disable internet for this VEGA process.",
+        "  /web fetch <https-url> Fetch one bounded text resource.",
         "",
         "Task Console:",
         "/workspace              Show workspace state",
@@ -182,7 +198,7 @@ def create_log(root: Path, model: str) -> Path:
             f"Started: {display_time()}",
             f"Project: {root}",
             f"Model: {model}",
-            f"Internet: {INTERNET}",
+            f"Internet: {internet_label()}",
             "Context: active session memory enabled",
             "",
         ]),
@@ -328,7 +344,7 @@ def print_status(root: Path, log_file: Path, model: str) -> None:
     print(f"Model profile: {model_profile}")
     print(f"Model: {model}")
     print(f"Model installed: {model_installed}")
-    print(f"Internet: {INTERNET}")
+    print(f"Internet: {internet_label()}")
     from tools.terminal_tools import list_allowed_commands
     terminal_policy = list_allowed_commands(root)
     if terminal_policy["ok"]:
@@ -449,6 +465,8 @@ def print_available_commands() -> None:
     print("/tools list")
     print("/run")
     print("/test")
+    print("/internet")
+    print("/web")
     print("/exit")
 
 
@@ -457,7 +475,7 @@ def print_about() -> None:
     print(f"Version: {VERSION}")
     print("Type: Local Project Coding-Agent")
     print("Runtime: CLI")
-    print(f"Internet: {INTERNET}")
+    print(f"Internet: {internet_label()}")
     print("Documents: supported")
     print("RAG: local keyword index")
     print("Model profiles: fast, code, docs, deep")
@@ -832,6 +850,12 @@ def handle_command(command: str, root: Path, log_file: Path, model: str) -> bool
     elif lower == "/test" or lower.startswith("/test "):
         from core.command_handler import handle_test_command
         print(handle_test_command(command, root))
+    elif lower == "/internet" or lower.startswith("/internet "):
+        from core.command_handler import handle_internet_command
+        print(handle_internet_command(command))
+    elif lower == "/web" or lower.startswith("/web "):
+        from core.command_handler import handle_web_command
+        print(handle_web_command(command, root))
     elif lower in {"/exit", "/bye", "/q"}:
         print("Bye.")
         append_log(log_file, "SYSTEM", "Session closed by user.")

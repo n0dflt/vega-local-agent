@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from unittest.mock import patch
 
 from tools.registry import get_tool
@@ -19,13 +19,17 @@ class TestToolsTests(unittest.TestCase):
                 {"id": "tests-terminal", "enabled": True},
                 {"id": "tests-terminal-tools", "enabled": True},
                 {"id": "tests-terminal-commands", "enabled": True},
+                {"id": "tests-web", "enabled": True},
+                {"id": "tests-web-tools", "enabled": True},
+                {"id": "tests-web-commands", "enabled": True},
+                {"id": "tests-web-cli", "enabled": True},
             ],
         }
 
         result = list_test_groups()
 
         self.assertTrue(result["ok"], result["error"])
-        self.assertEqual(len(result["data"]), 4)
+        self.assertEqual(len(result["data"]), 8)
         self.assertTrue(
             all(item["available"] for item in result["data"])
         )

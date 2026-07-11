@@ -1,0 +1,22 @@
+﻿{
+  "schema_version": 1,
+  "enabled_by_default": false,
+  "allowed_schemes": [
+    "https"
+  ],
+  "allowed_ports": [
+    443
+  ],
+  "request_timeout_seconds": 10,
+  "max_response_bytes": 200000,
+  "max_url_length": 2048,
+  "allowed_content_types": [
+    "text/",
+    "application/json",
+    "application/xml",
+    "application/xhtml+xml",
+    "application/rss+xml",
+    "application/atom+xml"
+  ],
+  "user_agent": "VEGA/1.9 Controlled Internet Layer"
+}
