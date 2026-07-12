@@ -99,3 +99,13 @@ class TestToolsAdapter:
             "runs": 1,
             "group": "all",
         }
+
+
+class ReviewToolsAdapter:
+    """Run the isolated review pipeline without exposing write tools."""
+    def __init__(self,project_root:Path,provider=None):
+        from review.review_pipeline import ReviewPipeline
+        self.pipeline=ReviewPipeline(project_root,provider)
+
+    def run_once(self,run)->dict:
+        return self.pipeline.run(run).to_dict()

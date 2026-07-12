@@ -1,0 +1,7 @@
+{
+  "blocking_severities": ["critical", "high"],
+  "allowed_categories": ["correctness", "security", "regression", "test_coverage", "architecture", "maintainability", "performance", "documentation"],
+  "max_findings": 100,
+  "fail_closed_on_invalid_report": true,
+  "require_review_after_each_successful_verification": true
+}

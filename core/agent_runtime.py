@@ -913,6 +913,7 @@ def build_orchestrator(
 
     from workflows import WorkflowEngine, default_registry
     from workflows.project_context import ProjectContextAdapter, TaskSystemAdapter
+    from review.code_reviewer import OllamaReviewProvider
 
     workflow_engine = WorkflowEngine(
         root,
@@ -920,6 +921,7 @@ def build_orchestrator(
         confirmation_manager=context.confirmation_manager,
         project_context=ProjectContextAdapter(root, context),
         task_adapter=TaskSystemAdapter(root),
+        review_provider=OllamaReviewProvider(context.model),
     )
 
     return AgentOrchestrator(

@@ -23,6 +23,7 @@ class WorkflowServices:
     project_context: Any
     patch_tools: Any
     test_tools: Any
+    review_tools: Any
     task_adapter: Any = None
 
 

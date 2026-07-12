@@ -27,6 +27,7 @@ class WorkflowStatus(str, Enum):
     WAITING_CONFIRMATION = "waiting_confirmation"
     EXECUTING = "executing"
     VERIFYING = "verifying"
+    REVIEWING = "reviewing"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -48,7 +49,8 @@ ALLOWED_TRANSITIONS={
  WorkflowStatus.WAITING_PATCH:frozenset({WorkflowStatus.WAITING_CONFIRMATION,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
  WorkflowStatus.WAITING_CONFIRMATION:frozenset({WorkflowStatus.EXECUTING,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
  WorkflowStatus.EXECUTING:frozenset({WorkflowStatus.VERIFYING,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
- WorkflowStatus.VERIFYING:frozenset({WorkflowStatus.WAITING_PATCH,WorkflowStatus.COMPLETED,WorkflowStatus.FAILED,WorkflowStatus.CANCELLED}),
+ WorkflowStatus.VERIFYING:frozenset({WorkflowStatus.WAITING_PATCH,WorkflowStatus.REVIEWING,WorkflowStatus.FAILED,WorkflowStatus.CANCELLED}),
+ WorkflowStatus.REVIEWING:frozenset({WorkflowStatus.WAITING_PATCH,WorkflowStatus.COMPLETED,WorkflowStatus.FAILED,WorkflowStatus.CANCELLED}),
  WorkflowStatus.COMPLETED:frozenset(),WorkflowStatus.FAILED:frozenset(),WorkflowStatus.CANCELLED:frozenset(),}
 
 
@@ -138,6 +140,8 @@ class WorkflowRun:
     required_confirmations: list[str] = field(default_factory=list)
     verification_results: list[dict[str, Any]] = field(default_factory=list)
     test_fix_iterations: list[dict[str, Any]] = field(default_factory=list)
+    review_results: list[dict[str, Any]] = field(default_factory=list)
+    patch_request_reason: str = "initial"
     max_fix_attempts: int = 3
     changed_files: list[str] = field(default_factory=list)
     manual_intervention_required: bool = False
@@ -148,6 +152,12 @@ class WorkflowRun:
     updated_at: str = field(default_factory=utc_now)
     linked_task_id: str | None = None
     def __post_init__(self) -> None:
+        if not isinstance(self.review_results,list):
+            raise ValueError("review_results must be a list.")
+        from review.models import ReviewReport
+        self.review_results=[ReviewReport.from_dict(item).to_dict() for item in self.review_results]
+        if self.patch_request_reason not in {"initial","test_failure","review_findings"}:
+            raise ValueError("Invalid patch_request_reason.")
         if (
             isinstance(self.max_fix_attempts, bool)
             or not isinstance(self.max_fix_attempts, int)

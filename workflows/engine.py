@@ -7,7 +7,7 @@ from core.confirmation_manager import ConfirmationManager
 from core.intent_router import ConfirmationDecision
 from planner import TaskPlanner
 from workflows.base_workflow import WorkflowServices
-from workflows.integrations import PatchToolsAdapter,TestToolsAdapter
+from workflows.integrations import PatchToolsAdapter,ReviewToolsAdapter,TestToolsAdapter
 from workflows.models import (
     ALLOWED_TRANSITIONS,
     TERMINAL_STATUSES,
@@ -34,6 +34,8 @@ class WorkflowEngine:
         project_context=None,
         patch_tools=None,
         test_tools=None,
+        review_provider=None,
+        review_tools=None,
         task_adapter=None,
     ) -> None:
         if not isinstance(registry, WorkflowRegistry):
@@ -47,6 +49,7 @@ class WorkflowEngine:
             project_context or ProjectContextAdapter(self.project_root),
             patch_tools or PatchToolsAdapter(),
             test_tools or TestToolsAdapter(self.project_root),
+            review_tools or ReviewToolsAdapter(self.project_root,review_provider),
             task_adapter or TaskSystemAdapter(self.project_root),
         )
         self.active_dir = self.project_root / "data" / "workflows" / "active"
@@ -142,6 +145,8 @@ class WorkflowEngine:
                 return self._recover_executing(run)
             if run.status is WorkflowStatus.VERIFYING:
                 return self._recover_verifying(run)
+            if run.status is WorkflowStatus.REVIEWING:
+                return self._recover_reviewing(run)
             raise ActiveWorkflowError(f"Unsupported recovery state: {run.status.value}.")
         except Exception as exc:
             self._fail(run, exc, manual=True)
@@ -274,11 +279,40 @@ class WorkflowEngine:
         )
         if not run.changed_files or not application_evidence:
             raise WorkflowError("Applied patch evidence is missing.")
-        self._execute_step(run,"report",lambda:{"status":"completed","changed_files":run.changed_files})
-        run.transition(WorkflowStatus.COMPLETED)
-        run.report = self._report(run)
+        run.transition(WorkflowStatus.REVIEWING)
         self._save(run)
-        self._archive(run)
+        return self._recover_reviewing(run)
+    def _recover_reviewing(self,run):
+        iteration=len(run.test_fix_iterations)
+        existing=next((item for item in run.review_results if item.get("patch_iteration")==iteration),None)
+        if existing is None:
+            review=self.services.review_tools.run_once(run)
+            from review.models import ReviewReport
+            review=ReviewReport.from_dict(review).to_dict()
+            run.review_results.append(review)
+            self._save(run)
+        else:
+            review=existing
+        blocking=review.get("blocking_findings") or []
+        if review.get("reviewer_error"):
+            raise WorkflowError(f"Reviewer infrastructure failed: {review['reviewer_error']}")
+        if review.get("passed") is True and not blocking:
+            self._execute_step(run,"report",lambda:{"status":"completed","changed_files":run.changed_files})
+            run.transition(WorkflowStatus.COMPLETED)
+            run.report=self._report(run)
+            self._save(run); self._archive(run)
+            return run
+        if not blocking:
+            raise WorkflowError("Review did not pass and supplied no blocking evidence.")
+        if iteration >= run.max_fix_attempts:
+            raise WorkflowError("Blocking review findings remain after the patch iteration limit.")
+        run.artifacts.setdefault("application_results",[]).append(
+            run.test_fix_iterations[-1]["application"]
+        )
+        run.artifacts.pop("application_result",None); run.artifacts.pop("requested_patch_id",None)
+        run.patch=None; run.required_confirmations=[]; run.patch_request_reason="review_findings"
+        for step_id in ("patch","confirmation","apply","verify"): self._reset_step(run.step(step_id))
+        run.transition(WorkflowStatus.WAITING_PATCH); self._save(run)
         return run
     def _continue_after_failed_verification(self,run,verification):
         if len(run.test_fix_iterations) >= run.max_fix_attempts:
@@ -293,6 +327,7 @@ class WorkflowEngine:
         run.artifacts.pop("application_result",None)
         run.artifacts.pop("requested_patch_id",None)
         run.patch=None
+        run.patch_request_reason="test_failure"
         run.required_confirmations=[]
         for step_id in ("patch","confirmation","apply","verify"):
             self._reset_step(run.step(step_id))
@@ -449,6 +484,12 @@ class WorkflowEngine:
                 f"Checks: {len(run.verification_results)}",
                 f"Fix attempts: {len(run.test_fix_iterations)}/{run.max_fix_attempts}",
                 f"Verification results: {run.verification_results}",
+                f"Reviews: {len(run.review_results)}",
+                f"Last review: {(run.review_results[-1].get('passed') if run.review_results else 'none')}",
+                f"Highest review severity: {(run.review_results[-1].get('highest_severity') if run.review_results else 'none')}",
+                f"Review findings: {(len(run.review_results[-1].get('findings') or []) if run.review_results else 0)}",
+                f"Blocking findings: {(len(run.review_results[-1].get('blocking_findings') or []) if run.review_results else 0)}",
+                f"Reviewed patch IDs: {([x.get('patch_id') for x in run.test_fix_iterations] if run.review_results else [])}",
                 f"Error: {run.error or 'none'}",
                 "Manual intervention required: "
                 f"{run.manual_intervention_required}",

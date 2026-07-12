@@ -22,6 +22,10 @@ class VerificationStub:
     def __init__(self,ok=True): self.ok=ok; self.runs=0
     def run_once(self,run): self.runs+=1; return {"ok":self.ok,"runs":self.runs,"workflow":run.workflow_type,"error":None if self.ok else "failed"}
 
+class PassReviewTools:
+    def run_once(self,run):
+        return {"review_id":"review-test","workflow_id":run.workflow_id,"patch_iteration":len(run.test_fix_iterations),"reviewed_patch_ids":[(run.patch or {}).get("patch_id")],"reviewed_files":list(run.changed_files),"findings":[],"blocking_findings":[],"highest_severity":"info","passed":True,"summary":"clean","reviewer_error":"","created_at":"test"}
+
 class LoopPatchStub:
     def __init__(self): self.applied=[]; self.states={}
     def prepare(self,run):
@@ -47,7 +51,7 @@ class WorkflowEngineTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup); self.root=Path(self.temp.name)
         self.confirmations=ConfirmationManager(); self.patch=PatchStub(); self.tests=VerificationStub()
-        self.engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=self.confirmations,patch_tools=self.patch,test_tools=self.tests)
+        self.engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=self.confirmations,patch_tools=self.patch,test_tools=self.tests,review_tools=PassReviewTools())
     def start(self,kind="feature",task="Implement feature"): return self.engine.start(kind,task,patch_id="patch-1")
     def test_start_without_patch_waits_for_patch(self):
         run=self.engine.start("feature","Implement feature")
@@ -75,12 +79,12 @@ class WorkflowEngineTests(unittest.TestCase):
         with self.assertRaises(ActiveWorkflowError): self.engine.start("bugfix","Fix error",patch_id="patch-2")
         self.assertEqual(self.engine.cancel().status,WorkflowStatus.CANCELLED)
     def test_resume_waiting_confirmation_after_restart(self):
-        run=self.start(); restarted=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=self.tests)
+        run=self.start(); restarted=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=self.tests,review_tools=PassReviewTools())
         self.assertEqual(restarted.resume().workflow_id,run.workflow_id); self.assertTrue(restarted.confirmation_manager.has_pending)
     def test_resume_read_only_states_reaches_confirmation(self):
         for state in (WorkflowStatus.CREATED,WorkflowStatus.ANALYZING,WorkflowStatus.PLANNING):
             with self.subTest(state=state), tempfile.TemporaryDirectory() as temporary:
-                root=Path(temporary); patch=PatchStub(); tests=VerificationStub(); engine=WorkflowEngine(root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests)
+                root=Path(temporary); patch=PatchStub(); tests=VerificationStub(); engine=WorkflowEngine(root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests,review_tools=PassReviewTools())
                 run=default_registry().get("feature").create_run("Implement export"); run.artifacts["requested_patch_id"]="patch-1"
                 if state is not WorkflowStatus.CREATED: run.transition(WorkflowStatus.ANALYZING)
                 if state is WorkflowStatus.PLANNING:
@@ -89,7 +93,7 @@ class WorkflowEngineTests(unittest.TestCase):
                 self.assertEqual(engine.resume().status,WorkflowStatus.WAITING_PATCH)
     def test_resume_waiting_patch_remains_read_only(self):
         run=self.engine.start("feature","Implement export")
-        restarted=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=self.tests)
+        restarted=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=self.tests,review_tools=PassReviewTools())
         restored=restarted.resume()
         self.assertEqual(restored.workflow_id,run.workflow_id)
         self.assertEqual(restored.status,WorkflowStatus.WAITING_PATCH)
@@ -113,14 +117,14 @@ class WorkflowEngineTests(unittest.TestCase):
         run=default_registry().get("feature").create_run("Task"); run.workflow_id="../escape"
         with self.assertRaises(ValueError): self.engine._save(run)
     def test_failed_verification_runs_once(self):
-        failing=VerificationStub(False); engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=failing)
+        failing=VerificationStub(False); engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=failing,review_tools=PassReviewTools())
         engine.start("bugfix","Fix error",patch_id="patch-1")
         run=engine.confirm()
         self.assertEqual(failing.runs,1); self.assertEqual(run.status,WorkflowStatus.WAITING_PATCH)
         self.assertEqual(len(run.test_fix_iterations),1)
     def test_failed_test_accepts_a_new_confirmed_fix(self):
         patch=LoopPatchStub(); tests=SequenceVerifier([False,True])
-        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests)
+        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests,review_tools=PassReviewTools())
         engine.start("bugfix","Fix error",patch_id="patch-1")
         waiting=engine.confirm()
         self.assertEqual(waiting.status,WorkflowStatus.WAITING_PATCH)
@@ -132,7 +136,7 @@ class WorkflowEngineTests(unittest.TestCase):
         self.assertEqual(completed.changed_files,["patch-1.py","patch-2.py"])
     def test_fix_limit_fails_closed(self):
         patch=LoopPatchStub(); tests=SequenceVerifier([False,False,False])
-        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests)
+        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests,review_tools=PassReviewTools())
         engine.start("bugfix","Fix error",patch_id="patch-1"); engine.confirm()
         engine.attach_patch("patch-2"); engine.confirm(); engine.attach_patch("patch-3")
         with self.assertRaises(WorkflowError): engine.confirm()
@@ -142,14 +146,14 @@ class WorkflowEngineTests(unittest.TestCase):
         self.assertTrue(failed.manual_intervention_required)
     def test_unrelated_confirmation_is_not_cleared_on_failure(self):
         manager=ConfirmationManager(); manager.request("other","other","Other action")
-        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=manager,patch_tools=self.patch,test_tools=self.tests)
+        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=manager,patch_tools=self.patch,test_tools=self.tests,review_tools=PassReviewTools())
         with self.assertRaises(Exception): engine.start("feature","Implement export",patch_id="patch-1")
         self.assertTrue(manager.has_pending); self.assertEqual(manager.pending.action_id,"other")
 
     def test_missing_verifier_cannot_complete(self):
         class MissingVerifier:
             def run_once(self,run): raise WorkflowError("Test Tools are unavailable")
-        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=MissingVerifier())
+        engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=self.patch,test_tools=MissingVerifier(),review_tools=PassReviewTools())
         engine.start("feature","Implement export",patch_id="patch-1")
         with self.assertRaises(WorkflowError): engine.confirm()
         self.assertEqual(engine.history()[0].status,WorkflowStatus.FAILED)

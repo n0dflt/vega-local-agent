@@ -7,7 +7,7 @@ class WorkflowModelTests(unittest.TestCase):
     def test_all_required_statuses_exist(self):
         self.assertEqual(
             {status.value for status in WorkflowStatus},
-            {"created", "analyzing", "planning", "waiting_patch", "waiting_confirmation", "executing", "verifying", "completed", "failed", "cancelled"},
+            {"created", "analyzing", "planning", "waiting_patch", "waiting_confirmation", "executing", "verifying", "reviewing", "completed", "failed", "cancelled"},
         )
 
     def test_model_round_trip(self):
@@ -27,6 +27,15 @@ class WorkflowModelTests(unittest.TestCase):
         data["max_fix_attempts"] = 0
         with self.assertRaises(ValueError):
             WorkflowRun.from_dict(data)
+
+    def test_v23_json_without_review_fields_loads_safely(self):
+        run = WorkflowRun.create("feature", "Add search", [])
+        data = run.to_dict()
+        data.pop("review_results")
+        data.pop("patch_request_reason")
+        restored = WorkflowRun.from_dict(data)
+        self.assertEqual(restored.review_results, [])
+        self.assertEqual(restored.patch_request_reason, "initial")
 
 
 if __name__ == "__main__":

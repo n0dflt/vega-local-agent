@@ -130,6 +130,7 @@ WORKFLOW_HELP = """Coding Workflow commands:
   /workflow attach-patch <pending_patch_id>
   /workflow link-task <task_id>
   /workflow status
+  /workflow review
   /workflow resume
   /workflow confirm
   /workflow cancel
@@ -193,6 +194,13 @@ def handle_workflow_command(
         if action == "status" and len(parts) == 2:
             run = engine.status()
             return "No active workflow." if run is None else _workflow_text(run)
+        if action == "review" and len(parts) == 2:
+            run = engine.status()
+            if run is None or not run.review_results:
+                return "No review result is available."
+            from review.models import ReviewReport
+            from review.report_builder import build_review_report
+            return build_review_report(ReviewReport.from_dict(run.review_results[-1]))
         if action == "resume" and len(parts) == 2:
             return _workflow_text(engine.resume())
         if action == "confirm" and len(parts) == 2:
@@ -213,17 +221,24 @@ def handle_workflow_command(
 
 
 def _workflow_text(run) -> str:
+    last_verification=(run.verification_results[-1].get("ok") if run.verification_results else None)
+    last_review=(run.review_results[-1] if run.review_results else None)
     lines = [
         f"Workflow: {run.workflow_type}",
         f"ID: {run.workflow_id}",
         f"Task: {run.task}",
         f"Status: {run.status.value}",
-        f"Progress: {run.current_step}/{len(run.steps)}",
+        f"Patch iterations: {len(run.test_fix_iterations)}/{run.max_fix_attempts}",
+        f"Last verification: {('passed' if last_verification is True else 'failed' if last_verification is False else 'none')}",
+        f"Last review: {('passed' if last_review and last_review.get('passed') else 'blocking' if last_review else 'none')}",
+        f"Blocking findings: {len((last_review or {}).get('blocking_findings') or [])}",
+        f"Patch request reason: {run.patch_request_reason}",
     ]
     if run.status.value == "waiting_confirmation":
         lines.append("Explicit confirmation required: /workflow confirm or /workflow cancel")
     if run.status.value == "waiting_patch":
         lines.append("Attach a pending Patch Tools artifact: /workflow attach-patch <pending_patch_id>")
+        lines.append("Next action: /workflow attach-patch <pending_patch_id>")
     if run.error:
         lines.append(f"Error: {run.error}")
     return "\n".join(lines)
