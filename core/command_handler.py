@@ -5,20 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 
-from tools.file_tools import (
-    find_file,
-    list_dir,
-    read_file,
-    search_in_files,
-    summarize_file,
-)
-from tools.git_tools import (
-    git_branch,
-    git_diff,
-    git_diff_cached,
-    git_log,
-    git_status,
-)
+from core.tool_executor import ToolExecutor
 from tools.patch_tools import (
     apply_patch,
     list_patches,
@@ -155,7 +142,24 @@ def _clean_cli_token(value: str) -> str:
     return value.strip().strip('"').strip("'")
 
 
-def handle_file_command(command: str) -> str:
+def _resolve_tool_executor(
+    tool_executor: ToolExecutor | None,
+) -> ToolExecutor:
+    if tool_executor is None:
+        return ToolExecutor()
+
+    if not isinstance(tool_executor, ToolExecutor):
+        raise TypeError(
+            "tool_executor must be a ToolExecutor instance."
+        )
+
+    return tool_executor
+
+
+def handle_file_command(
+    command: str,
+    tool_executor: ToolExecutor | None = None,
+) -> str:
     try:
         parts = shlex.split(command, posix=False)
     except ValueError as exc:
@@ -168,17 +172,34 @@ def handle_file_command(command: str) -> str:
     argument = " ".join(parts[2:]).strip().strip('"')
 
     if action == "list":
-        result = list_dir(argument or ".")
+        tool_name = "list_dir"
+        arguments = {"path": argument or "."}
     elif action == "read" and argument:
-        result = read_file(argument)
+        tool_name = "read_file"
+        arguments = {"path": argument}
     elif action == "find" and argument:
-        result = find_file(argument)
+        tool_name = "find_file"
+        arguments = {"name": argument}
     elif action == "search" and argument:
-        result = search_in_files(argument)
+        tool_name = "search_in_files"
+        arguments = {"query": argument}
     elif action in {"summary", "summarize"} and argument:
-        result = summarize_file(argument)
+        tool_name = "summarize_file"
+        arguments = {"path": argument}
     else:
         return FILE_HELP
+
+    execution_result = _resolve_tool_executor(
+        tool_executor
+    ).execute_named(
+        tool_name,
+        **arguments,
+    )
+
+    if not execution_result.ok:
+        return f"File command error: {execution_result.error}"
+
+    result = execution_result.data
 
     if not result["ok"]:
         return f"File command error: {result['error']}"
@@ -280,7 +301,11 @@ def handle_patch_command(command: str, mode_session=None) -> str:
     )
 
 
-def handle_git_command(command: str) -> str:
+def handle_git_command(
+    command: str,
+    project_root=None,
+    tool_executor: ToolExecutor | None = None,
+) -> str:
     try:
         parts = shlex.split(command, posix=False)
     except ValueError as exc:
@@ -290,28 +315,23 @@ def handle_git_command(command: str) -> str:
         return GIT_HELP
 
     action = _clean_cli_token(parts[1]).lower()
+    workspace = "." if project_root is None else project_root
 
     if action == "status" and len(parts) == 2:
-        result = git_status(".")
-
-        if result.ok and not result.stdout.strip():
-            return "Git working tree is clean."
+        tool_name = "git_status"
+        arguments = {"workspace": workspace}
 
     elif action == "diff" and len(parts) == 2:
-        result = git_diff(".")
-
-        if result.ok and not result.stdout.strip():
-            return "No unstaged changes."
+        tool_name = "git_diff"
+        arguments = {"workspace": workspace}
 
     elif (
         action == "diff"
         and len(parts) == 3
         and _clean_cli_token(parts[2]).lower() == "--cached"
     ):
-        result = git_diff_cached(".")
-
-        if result.ok and not result.stdout.strip():
-            return "No staged changes."
+        tool_name = "git_diff_cached"
+        arguments = {"workspace": workspace}
 
     elif action == "log" and len(parts) in {2, 3}:
         if len(parts) == 2:
@@ -322,20 +342,44 @@ def handle_git_command(command: str) -> str:
             except ValueError:
                 return "Git command error: log limit must be an integer from 1 to 100."
 
-        result = git_log(".", limit)
+        tool_name = "git_log"
+        arguments = {
+            "workspace": workspace,
+            "limit": limit,
+        }
 
     elif action == "branch" and len(parts) == 2:
-        result = git_branch(".")
-
-        if result.ok and not result.stdout.strip():
-            return "Git repository is in detached HEAD state."
+        tool_name = "git_branch"
+        arguments = {"workspace": workspace}
 
     else:
         return GIT_HELP
 
+    execution_result = _resolve_tool_executor(
+        tool_executor
+    ).execute_named(
+        tool_name,
+        **arguments,
+    )
+
+    if not execution_result.ok:
+        return f"Git command error: {execution_result.error}"
+
+    result = execution_result.data
+
     if not result.ok:
         error = result.stderr.strip() or "Git command failed."
         return f"Git command error: {error}"
+
+    if not result.stdout.strip():
+        empty_messages = {
+            "git_status": "Git working tree is clean.",
+            "git_diff": "No unstaged changes.",
+            "git_diff_cached": "No staged changes.",
+            "git_branch": "Git repository is in detached HEAD state.",
+        }
+        if tool_name in empty_messages:
+            return empty_messages[tool_name]
 
     return result.stdout.rstrip()
 
@@ -987,10 +1031,11 @@ def handle_mode_command(command: str, mode_session) -> str:
     return MODE_HELP
 
 
-def tools_list_text() -> str:
-    from tools.registry import list_tools
-
+def tools_list_text(
+    tool_executor: ToolExecutor | None = None,
+) -> str:
+    executor = _resolve_tool_executor(tool_executor)
     return "Available tools:\n" + "\n".join(
         f"  {name}"
-        for name in list_tools()
+        for name in executor.registered_tools()
     )

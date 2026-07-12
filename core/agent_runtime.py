@@ -29,6 +29,7 @@ from core.orchestrator import (
     AgentOrchestrator,
     OrchestrationKind,
 )
+from core.tool_executor import ToolExecutor
 
 DEFAULT_MODEL = "vega-core"
 INTERNET = "OFF"
@@ -770,7 +771,14 @@ def handle_task_command(command: str, root: Path) -> None:
     print_unknown_command(stripped)
 
 
-def handle_command(command: str, root: Path, log_file: Path, model: str, mode_session=None) -> bool:
+def handle_command(
+    command: str,
+    root: Path,
+    log_file: Path,
+    model: str,
+    mode_session=None,
+    tool_executor: ToolExecutor | None = None,
+) -> bool:
     command = command.strip()
     lower = command.lower()
 
@@ -800,16 +808,31 @@ def handle_command(command: str, root: Path, log_file: Path, model: str, mode_se
         handle_journal_command(root)
     elif lower == "/file" or lower.startswith("/file "):
         from core.command_handler import handle_file_command
-        print(handle_file_command(command))
+        print(
+            handle_file_command(
+                command,
+                tool_executor=tool_executor,
+            )
+        )
     elif lower == "/patch" or lower.startswith("/patch "):
         from core.command_handler import handle_patch_command
         print(handle_patch_command(command, mode_session))
     elif lower == "/git" or lower.startswith("/git "):
         from core.command_handler import handle_git_command
-        print(handle_git_command(command))
+        print(
+            handle_git_command(
+                command,
+                project_root=root,
+                tool_executor=tool_executor,
+            )
+        )
     elif lower == "/tools list":
         from core.command_handler import tools_list_text
-        print(tools_list_text())
+        print(
+            tools_list_text(
+                tool_executor=tool_executor,
+            )
+        )
     elif lower == "/memory" or lower.startswith("/memory "):
         from core.command_handler import handle_memory_command
         print(handle_memory_command(command, root))
@@ -886,11 +909,20 @@ def build_orchestrator(
 
 def build_command_executor(
     context: ExecutionContext,
+    *,
+    tool_executor: ToolExecutor | None = None,
 ) -> CommandExecutor:
     """Create compatibility handlers for routed runtime commands."""
     if not isinstance(context, ExecutionContext):
         raise TypeError(
             "context must be an ExecutionContext instance."
+        )
+
+    if tool_executor is None:
+        tool_executor = ToolExecutor()
+    elif not isinstance(tool_executor, ToolExecutor):
+        raise TypeError(
+            "tool_executor must be a ToolExecutor instance."
         )
 
     def legacy_adapter(
@@ -902,6 +934,7 @@ def build_command_executor(
             context.log_file,
             context.model,
             context.mode_session,
+            tool_executor=tool_executor,
         )
 
     def docs_adapter(
@@ -961,8 +994,10 @@ def main() -> int:
         mode_session=mode_session,
     )
     context = orchestrator.context
+    tool_executor = ToolExecutor()
     command_executor = build_command_executor(
-        context
+        context,
+        tool_executor=tool_executor,
     )
 
     from ui.startup_screen import (

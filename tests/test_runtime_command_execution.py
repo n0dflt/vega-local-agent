@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from core.agent_modes import ModeRegistry, ModeSession
 from core.agent_runtime import build_command_executor
@@ -12,6 +12,7 @@ from core.command_executor import (
 )
 from core.command_router import CommandRoute, CommandTarget
 from core.execution_context import ExecutionContext
+from core.tool_executor import ToolExecutor
 
 
 def make_route(
@@ -51,8 +52,12 @@ class RuntimeCommandExecutionTests(unittest.TestCase):
         target: CommandTarget,
         command_name: str,
         arguments: str = "",
+        tool_executor: ToolExecutor | None = None,
     ):
-        executor = build_command_executor(self.context)
+        executor = build_command_executor(
+            self.context,
+            tool_executor=tool_executor,
+        )
         route = make_route(target, command_name, arguments)
         return executor.execute(CommandExecutionRequest(route))
 
@@ -99,7 +104,31 @@ class RuntimeCommandExecutionTests(unittest.TestCase):
             self.context.log_file,
             self.context.model,
             self.context.mode_session,
+            tool_executor=ANY,
         )
+
+    @patch("core.agent_runtime.handle_command")
+    def test_factory_passes_injected_tool_executor(self, handler) -> None:
+        handler.return_value = True
+        tool_executor = ToolExecutor({})
+
+        self.execute(
+            CommandTarget.STATUS,
+            "/status",
+            tool_executor=tool_executor,
+        )
+
+        self.assertIs(
+            handler.call_args.kwargs["tool_executor"],
+            tool_executor,
+        )
+
+    def test_factory_rejects_invalid_tool_executor(self) -> None:
+        with self.assertRaises(TypeError):
+            build_command_executor(
+                self.context,
+                tool_executor=object(),
+            )
 
     @patch("core.agent_runtime.dispatch_docs_command")
     @patch("core.agent_runtime.handle_command")
@@ -108,10 +137,15 @@ class RuntimeCommandExecutionTests(unittest.TestCase):
         legacy_handler,
         docs_handler,
     ) -> None:
+        tool_calls = []
+        tool_executor = ToolExecutor(
+            {"sentinel": lambda: tool_calls.append(True)}
+        )
         result = self.execute(
             CommandTarget.DOCS,
             "/docs",
             "search architecture",
+            tool_executor=tool_executor,
         )
 
         self.assertTrue(result.ok)
@@ -120,6 +154,7 @@ class RuntimeCommandExecutionTests(unittest.TestCase):
             self.context.project_root,
         )
         legacy_handler.assert_not_called()
+        self.assertEqual(tool_calls, [])
 
     @patch("core.agent_runtime.dispatch_docs_command")
     def test_docs_is_logged_once(self, docs_handler) -> None:
