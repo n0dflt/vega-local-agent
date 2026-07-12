@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.5.0 - Workflow Checkpoints and Safe Recovery
+
+Added:
+
+* Immutable workflow checkpoints at workflow start, stable waiting states, before
+  and after patch application, after verification and review evidence, and terminal
+  state transitions.
+* Deterministic checkpoint payload integrity validation and equivalent-checkpoint
+  deduplication.
+* Recovery diagnosis for missing, corrupt, healthy, recoverable, and ambiguous
+  active workflow state.
+* Safe quarantine of corrupt active workflow JSON and atomic restoration of a
+  validated `WorkflowRun` from the latest safe active checkpoint.
+* `/workflow recovery-status [workflow_id]`, `/workflow checkpoints [workflow_id]`,
+  and `/workflow recover <checkpoint_id> CONFIRM` commands.
+
+Changed:
+
+* Terminal workflow checkpoints move from active storage to checkpoint history.
+* Checkpoint failure stops workflow progression instead of silently disabling
+  checkpoint protection.
+* Current version updated to v2.5.0.
+
+Security:
+
+* Malformed, unsafe, terminal, history-only, outdated, unsupported, and ambiguous
+  checkpoints fail closed.
+* Recovery restores workflow state only. It does not apply or roll back patches,
+  resume execution, restore confirmation, run tests or review, execute terminal
+  commands, or perform Git operations.
+* Recovery requires the exact uppercase `CONFIRM` token and never continues the
+  workflow automatically; `/workflow resume` remains a separate user action.
+* Recovery uses process-local locking, active checkpoints only, and latest-safe
+  selection. Older checkpoints cannot be selected manually, and checkpoint and
+  workflow archival are not a single multi-file database transaction.
+
 ## v2.4.0 - Controlled Review Pipeline
 
 Added:

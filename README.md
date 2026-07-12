@@ -4,7 +4,7 @@ VEGA is a local project coding-agent for working with code, project structure, l
 
 ## Current version
 
-v2.4.0 - Controlled Review Pipeline
+v2.5.0 - Workflow Checkpoints and Safe Recovery
 
 ## Features
 
@@ -32,6 +32,7 @@ v2.4.0 - Controlled Review Pipeline
 * Agent Orchestration Foundation with deterministic routing, shared session state, runtime isolation, and an extracted Ollama client
 * Structured Command Execution with typed requests, results, and statuses
 * Controlled Tool Orchestration for the read-only `/file`, `/git`, and `/tools list` commands
+* Immutable workflow checkpoints with explicit, state-only recovery
 
 ## Requirements
 
@@ -560,13 +561,13 @@ The predefined test group is:
 Current stable checkpoint:
 
 ```text
-v2.4.0 - Controlled Review Pipeline
+v2.5.0 - Workflow Checkpoints and Safe Recovery
 ```
 
 Next planned stage:
 
 ```text
-v2.5.0 - Checkpoints and Recovery.
+To be determined.
 ```
 
 ## VEGA v1.12.0 - Release Manager
@@ -691,3 +692,42 @@ before another review runs. Review fixes share the existing three-patch limit.
 verification and review evidence instead of applying patches or invoking Reviewer
 again. Reviewer has no Patch Tools, shell, or file-writing capability, and invalid
 or unavailable provider output fails closed.
+
+## VEGA v2.5.0 - Workflow Checkpoints and Safe Recovery
+
+VEGA records immutable workflow checkpoints at controlled boundaries: workflow
+start, stable waiting states, before and after patch application, after verification
+and review evidence is recorded, and at terminal state transitions. Payloads use a
+deterministic representation for integrity validation, equivalent checkpoints are
+deduplicated, and terminal workflow checkpoints move to history. A checkpoint
+failure stops workflow progression instead of silently disabling protection;
+malformed or unsafe checkpoint data fails closed.
+
+The Recovery Manager diagnoses missing, corrupt, healthy, and ambiguous active
+workflow state. It can select only the latest safe active checkpoint, move corrupt
+active workflow JSON unchanged into managed quarantine, and atomically restore a
+validated `WorkflowRun`. Terminal, history-only, outdated, malformed, unsupported,
+and ambiguously sequenced checkpoints are refused.
+
+Recovery inspection and restoration use these commands:
+
+```text
+/workflow recovery-status
+/workflow recovery-status <workflow_id>
+
+/workflow checkpoints
+/workflow checkpoints <workflow_id>
+
+/workflow recover <checkpoint_id> CONFIRM
+```
+
+Recovery restores serialized workflow state only. It does not apply or roll back
+patches, restore process-local confirmation, resume workflow execution, run tests
+or review, execute terminal commands, or perform Git operations. After reviewing
+the restored state, the user must run `/workflow resume` separately.
+
+Recovery intentionally uses process-local locking. Only active checkpoints are
+recoverable, and an older checkpoint cannot be selected manually. Checkpoint and
+workflow archival are separate filesystem operations rather than one multi-file
+database transaction. Recovery never continues execution automatically, and the
+exact uppercase token `CONFIRM` is mandatory.
