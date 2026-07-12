@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.3.0 - Controlled Test-Fix Loop
+
+Added:
+
+* Repeated verification after explicitly supplied fixing patches.
+* A controlled transition back to waiting for another patch after a real test
+  failure.
+* Separate confirmation for every new patch iteration.
+* Persistent history of applied patches and their verification results.
+* Accumulation of changed files across patch iterations.
+
+Changed:
+
+* Workflows may continue through at most three patch iterations before stopping.
+* Test Tools results distinguish a real test failure from failure of the test
+  runner itself. Runner failures remain infrastructure errors and do not enter
+  the fix loop.
+* VEGA waits for the user to provide a real pending Patch Tools artifact; it does
+  not generate a fixing patch automatically.
+
+Security:
+
+* Exhausting the three-iteration limit ends the workflow fail-closed and requires
+  manual intervention.
+* Persisted patch and verification evidence prevents an applied patch from being
+  applied again and prevents a saved verification from being rerun during resume.
+* Automatic rollback and unbounded autonomous test-fix loops are not enabled.
+
 ## v2.2.0 - Coding Workflows
 
 Added:

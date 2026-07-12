@@ -4,7 +4,7 @@ VEGA is a local project coding-agent for working with code, project structure, l
 
 ## Current version
 
-v2.2.0
+v2.3.0 - Controlled Test-Fix Loop
 
 ## Features
 
@@ -560,13 +560,13 @@ The predefined test group is:
 Current stable checkpoint:
 
 ```text
-v2.2.0 - Coding Workflows.
+v2.3.0 - Controlled Test-Fix Loop
 ```
 
 Next planned stage:
 
 ```text
-v2.2.0 - Coding Workflows.
+To be determined.
 ```
 
 ## VEGA v1.12.0 - Release Manager
@@ -637,3 +637,37 @@ Start performs only read-only analysis and planning, then stops at `waiting_patc
 confirmation. The optional legacy `--patch` start form remains confirmation-gated.
 Task plans remain inside the workflow unless `/workflow link-task <task_id>` is
 invoked explicitly.
+
+## VEGA v2.3.0 - Controlled Test-Fix Loop
+
+After an explicitly confirmed patch is applied, the workflow runs controlled
+verification. A successful path is:
+
+```text
+patch
+-> confirmation
+-> apply
+-> verification
+-> completed
+```
+
+When verification reports a real test failure, the workflow preserves the patch
+and verification history and waits for another real pending Patch Tools artifact
+from the user:
+
+```text
+patch
+-> confirmation
+-> apply
+-> failed verification
+-> waiting for another patch
+-> new confirmation
+-> apply
+-> verification
+```
+
+Every patch requires its own explicit confirmation. VEGA does not generate the
+next fixing patch, run an infinite autonomous loop, or automatically roll back an
+applied patch. A workflow permits at most three patch iterations. If verification
+still fails after the limit is reached, the workflow stops fail-closed and requires
+manual intervention.
