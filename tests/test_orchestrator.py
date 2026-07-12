@@ -1,4 +1,5 @@
 ﻿import tempfile
+import shutil
 import unittest
 from pathlib import Path
 
@@ -19,6 +20,11 @@ class AgentOrchestratorTests(unittest.TestCase):
         self.project_root = Path(
             self.temporary_directory.name
         ).resolve()
+        (self.project_root / "config").mkdir()
+        shutil.copy(
+            Path(__file__).parents[1] / "config" / "checkpoint_policy.json",
+            self.project_root / "config" / "checkpoint_policy.json",
+        )
 
         mode_session = ModeSession(
             ModeRegistry()

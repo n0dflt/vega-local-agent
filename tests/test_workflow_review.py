@@ -1,4 +1,4 @@
-import tempfile,unittest
+import shutil,tempfile,unittest
 from pathlib import Path
 from review.models import ReviewFinding,ReviewReport
 from workflows import WorkflowEngine,default_registry
@@ -34,7 +34,9 @@ class ErrorPassedReviews:
 class WorkflowReviewTests(unittest.TestCase):
     def engine(self,tests,reviews):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
-        return WorkflowEngine(Path(self.temp.name),default_registry(),patch_tools=Patch(),test_tools=tests,review_tools=reviews)
+        root=Path(self.temp.name); (root/"config").mkdir()
+        shutil.copy(Path(__file__).parents[1]/"config/checkpoint_policy.json",root/"config/checkpoint_policy.json")
+        return WorkflowEngine(root,default_registry(),patch_tools=Patch(),test_tools=tests,review_tools=reviews)
     def test_failed_verification_skips_review(self):
         reviews=Reviews([None]); engine=self.engine(Tests([False]),reviews); engine.start("bugfix","fix",patch_id="p1")
         self.assertEqual(engine.confirm().status,WorkflowStatus.WAITING_PATCH); self.assertEqual(reviews.runs,0)

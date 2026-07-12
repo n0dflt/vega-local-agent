@@ -7,6 +7,8 @@ from core.confirmation_manager import ConfirmationManager
 from core.intent_router import ConfirmationDecision
 from planner import TaskPlanner
 from workflows.base_workflow import WorkflowServices
+from workflows.checkpoint_models import CheckpointReason, WorkflowCheckpoint, payload_sha256
+from workflows.checkpoint_store import CheckpointStorageError, CheckpointStore
 from workflows.integrations import PatchToolsAdapter,ReviewToolsAdapter,TestToolsAdapter
 from workflows.models import (
     ALLOWED_TRANSITIONS,
@@ -37,11 +39,13 @@ class WorkflowEngine:
         review_provider=None,
         review_tools=None,
         task_adapter=None,
+        checkpoint_store: CheckpointStore | None = None,
     ) -> None:
         if not isinstance(registry, WorkflowRegistry):
             raise TypeError("registry must be a WorkflowRegistry instance.")
         self.project_root = Path(project_root).resolve()
         self.registry = registry
+        self.checkpoint_store = checkpoint_store if checkpoint_store is not None else CheckpointStore(self.project_root)
         self.confirmation_manager=confirmation_manager or ConfirmationManager()
         self.services = WorkflowServices(
             self.project_root,
@@ -72,6 +76,7 @@ class WorkflowEngine:
         run = workflow.create_run(task)
         self._save(run)
         try:
+            self._checkpoint(run, CheckpointReason.WORKFLOW_STARTED)
             run = self._advance_readonly(run)
             if patch_id:
                 run = self.attach_patch(patch_id)
@@ -91,7 +96,10 @@ class WorkflowEngine:
             run.required_confirmations=["patch_application"]
             self._restore_confirmation(run)
             self._save(run)
+            self._checkpoint(run, CheckpointReason.STATE_TRANSITION)
             return run
+        except CheckpointStorageError:
+            raise
         except Exception:
             run.artifacts.pop("requested_patch_id",None)
             run.patch=None
@@ -135,11 +143,15 @@ class WorkflowEngine:
                 WorkflowStatus.ANALYZING,
                 WorkflowStatus.PLANNING,
             }:
+                if run.status is WorkflowStatus.CREATED:
+                    self._checkpoint(run, CheckpointReason.WORKFLOW_STARTED)
                 return self._advance_readonly(run)
             if run.status is WorkflowStatus.WAITING_PATCH:
+                self._checkpoint(run, CheckpointReason.STATE_TRANSITION)
                 return run
             if run.status is WorkflowStatus.WAITING_CONFIRMATION:
                 self._restore_confirmation(run)
+                self._checkpoint(run, CheckpointReason.STATE_TRANSITION)
                 return run
             if run.status is WorkflowStatus.EXECUTING:
                 return self._recover_executing(run)
@@ -169,6 +181,7 @@ class WorkflowEngine:
             self._complete_step(run,"confirmation",{"confirmed":True})
             run.transition(WorkflowStatus.EXECUTING)
             self._save(run)
+            self._checkpoint(run, CheckpointReason.BEFORE_PATCH_APPLY)
             application=self._execute_step(run,"apply",lambda:workflow.apply_patch(run,self.services))
             if application.get("ok") is not True:
                 raise WorkflowError(
@@ -184,6 +197,7 @@ class WorkflowEngine:
                 )
             run.transition(WorkflowStatus.VERIFYING)
             self._save(run)
+            self._checkpoint(run, CheckpointReason.AFTER_PATCH_APPLY)
             return self._recover_verifying(run)
         except Exception as exc:
             self._fail(run, exc, manual=True)
@@ -198,7 +212,7 @@ class WorkflowEngine:
         run.transition(WorkflowStatus.CANCELLED)
         run.report = self._report(run)
         self._save(run)
-        self._archive(run)
+        self._checkpoint_terminal_and_archive(run)
         return run
     def history(self) -> list[WorkflowRun]:
         return [
@@ -238,6 +252,7 @@ class WorkflowEngine:
             run.plan=self._execute_step(run,plan_id,lambda:workflow.plan(run,self.services))
             run.transition(WorkflowStatus.WAITING_PATCH)
             self._save(run)
+            self._checkpoint(run, CheckpointReason.STATE_TRANSITION)
         return run
     def _recover_executing(self,run):
         patch_id = (run.patch or {}).get("patch_id")
@@ -251,10 +266,12 @@ class WorkflowEngine:
             if apply_step.status is StepStatus.PENDING:
                 apply_step.start()
             apply_step.complete({"ok":True,"data":state,"recovered":True})
+        run.artifacts["application_result"] = apply_step.result
         if state.get("target_path") and state["target_path"] not in run.changed_files:
             run.changed_files.append(state["target_path"])
         run.transition(WorkflowStatus.VERIFYING)
         self._save(run)
+        self._checkpoint(run, CheckpointReason.AFTER_PATCH_APPLY)
         return self._recover_verifying(run)
     def _recover_verifying(self,run):
         workflow=self.registry.get(run.workflow_type)
@@ -269,8 +286,12 @@ class WorkflowEngine:
             self._save(run)
         else:
             verification=verify_step.result
+            if len(run.verification_results) <= len(run.test_fix_iterations):
+                run.verification_results.append(verification)
+                self._save(run)
         if len(run.test_fix_iterations) < len(run.verification_results):
             self._record_iteration(run,verification)
+        self._checkpoint(run, CheckpointReason.VERIFICATION_RECORDED)
         if verification.get("ok") is not True:
             return self._continue_after_failed_verification(run,verification)
         application_evidence = (
@@ -293,6 +314,7 @@ class WorkflowEngine:
             self._save(run)
         else:
             review=existing
+        self._checkpoint(run, CheckpointReason.REVIEW_RECORDED)
         blocking=review.get("blocking_findings") or []
         if review.get("reviewer_error"):
             raise WorkflowError(f"Reviewer infrastructure failed: {review['reviewer_error']}")
@@ -300,7 +322,8 @@ class WorkflowEngine:
             self._execute_step(run,"report",lambda:{"status":"completed","changed_files":run.changed_files})
             run.transition(WorkflowStatus.COMPLETED)
             run.report=self._report(run)
-            self._save(run); self._archive(run)
+            self._save(run)
+            self._checkpoint_terminal_and_archive(run)
             return run
         if not blocking:
             raise WorkflowError("Review did not pass and supplied no blocking evidence.")
@@ -313,6 +336,7 @@ class WorkflowEngine:
         run.patch=None; run.required_confirmations=[]; run.patch_request_reason="review_findings"
         for step_id in ("patch","confirmation","apply","verify"): self._reset_step(run.step(step_id))
         run.transition(WorkflowStatus.WAITING_PATCH); self._save(run)
+        self._checkpoint(run, CheckpointReason.STATE_TRANSITION)
         return run
     def _continue_after_failed_verification(self,run,verification):
         if len(run.test_fix_iterations) >= run.max_fix_attempts:
@@ -333,6 +357,7 @@ class WorkflowEngine:
             self._reset_step(run.step(step_id))
         run.transition(WorkflowStatus.WAITING_PATCH)
         self._save(run)
+        self._checkpoint(run, CheckpointReason.STATE_TRANSITION)
         return run
     def _record_iteration(self,run,verification):
         patch=dict(run.patch or {})
@@ -445,6 +470,26 @@ class WorkflowEngine:
             raise WorkflowStorageError(
                 f"Cannot archive workflow state: {exc}"
             ) from exc
+    def _checkpoint(self, run, reason):
+        if not isinstance(run, WorkflowRun):
+            raise TypeError("Checkpoint creation requires a WorkflowRun.")
+        normalized_reason = CheckpointReason(reason)
+        latest = self.checkpoint_store.latest(run.workflow_id, include_history=False)
+        current_hash = payload_sha256(run.to_dict())
+        if (
+            latest is not None
+            and latest.reason is normalized_reason
+            and latest.workflow_status is run.status
+            and latest.payload_sha256 == current_hash
+        ):
+            return latest
+        return self.checkpoint_store.create(run, normalized_reason)
+    def _checkpoint_terminal_and_archive(self, run):
+        self._checkpoint(run, CheckpointReason.STATE_TRANSITION)
+        # Archive immutable evidence first. If this fails, the terminal workflow
+        # file remains active and available for manual diagnosis.
+        self.checkpoint_store.archive_workflow(run.workflow_id)
+        self._archive(run)
     def _fail(self,run,exc,manual=False):
         if (
             not run.is_terminal
@@ -456,7 +501,13 @@ class WorkflowEngine:
         run.report = self._report(run)
         self._cancel_own_confirmation(run)
         self._save(run)
-        self._archive(run)
+        try:
+            self._checkpoint_terminal_and_archive(run)
+        except Exception as terminal_exc:
+            raise WorkflowStorageError(
+                "Workflow failure was persisted, but terminal checkpoint or "
+                f"archive handling failed: {terminal_exc}"
+            ) from exc
     def _report(self,run):
         patch_id=(run.patch or {}).get("patch_id")
         application=run.artifacts.get("application_result") or run.step("apply").result or {}

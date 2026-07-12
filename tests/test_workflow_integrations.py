@@ -1,4 +1,4 @@
-import tempfile,unittest
+import shutil,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from core.confirmation_manager import ConfirmationManager
@@ -17,6 +17,8 @@ class PassReviewTools:
 class ProductionIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup); self.root=Path(self.temp.name)
+        (self.root/"config").mkdir()
+        shutil.copy(Path(__file__).parents[1]/"config/checkpoint_policy.json",self.root/"config/checkpoint_policy.json")
         (self.root/"sample.txt").write_text("before\n",encoding="utf-8")
         self.root_patches=[patch("core.safety.get_project_root",return_value=self.root),patch("tools.patch_tools.get_project_root",return_value=self.root)]
         for item in self.root_patches: item.start(); self.addCleanup(item.stop)

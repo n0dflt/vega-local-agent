@@ -1,4 +1,4 @@
-import json,tempfile,unittest
+import json,shutil,tempfile,unittest
 from pathlib import Path
 from core.confirmation_manager import ConfirmationManager
 from workflows import WorkflowEngine,default_registry
@@ -50,8 +50,13 @@ class SequenceVerifier:
 class WorkflowEngineTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup); self.root=Path(self.temp.name)
+        self.install_policy(self.root)
         self.confirmations=ConfirmationManager(); self.patch=PatchStub(); self.tests=VerificationStub()
         self.engine=WorkflowEngine(self.root,default_registry(),confirmation_manager=self.confirmations,patch_tools=self.patch,test_tools=self.tests,review_tools=PassReviewTools())
+    @staticmethod
+    def install_policy(root):
+        (root/"config").mkdir(parents=True,exist_ok=True)
+        shutil.copy(Path(__file__).parents[1]/"config/checkpoint_policy.json",root/"config/checkpoint_policy.json")
     def start(self,kind="feature",task="Implement feature"): return self.engine.start(kind,task,patch_id="patch-1")
     def test_start_without_patch_waits_for_patch(self):
         run=self.engine.start("feature","Implement feature")
@@ -84,7 +89,7 @@ class WorkflowEngineTests(unittest.TestCase):
     def test_resume_read_only_states_reaches_confirmation(self):
         for state in (WorkflowStatus.CREATED,WorkflowStatus.ANALYZING,WorkflowStatus.PLANNING):
             with self.subTest(state=state), tempfile.TemporaryDirectory() as temporary:
-                root=Path(temporary); patch=PatchStub(); tests=VerificationStub(); engine=WorkflowEngine(root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests,review_tools=PassReviewTools())
+                root=Path(temporary); self.install_policy(root); patch=PatchStub(); tests=VerificationStub(); engine=WorkflowEngine(root,default_registry(),confirmation_manager=ConfirmationManager(),patch_tools=patch,test_tools=tests,review_tools=PassReviewTools())
                 run=default_registry().get("feature").create_run("Implement export"); run.artifacts["requested_patch_id"]="patch-1"
                 if state is not WorkflowStatus.CREATED: run.transition(WorkflowStatus.ANALYZING)
                 if state is WorkflowStatus.PLANNING:

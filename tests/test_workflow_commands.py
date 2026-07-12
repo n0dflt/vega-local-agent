@@ -1,3 +1,4 @@
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,11 @@ class WorkflowCommandTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        (self.root / "config").mkdir()
+        shutil.copy(
+            Path(__file__).parents[1] / "config" / "checkpoint_policy.json",
+            self.root / "config" / "checkpoint_policy.json",
+        )
 
     def test_intent_and_command_routing(self):
         intent = IntentRouter().route('/workflow start feature "Add command"')
