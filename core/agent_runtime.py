@@ -194,6 +194,8 @@ def help_text() -> str:
         "  /release status         Show release readiness.",
         "  /release check          Run configured release checks.",
         "  /release notes          Build release notes draft.",
+        "  /workflow              Show Coding Workflow help.",
+        "  /workflow start ...    Start feature, bugfix, or refactor workflow.",
         "",
         "Task Console:",
         "/workspace              Show workspace state",
@@ -437,6 +439,7 @@ def print_available_commands() -> None:
     print("/web")
     print("/docgen")
     print("/release")
+    print("/workflow")
     print("/exit")
 
 
@@ -863,6 +866,10 @@ def handle_command(
         from core.command_handler import handle_release_command
 
         print(handle_release_command(command, root))
+    elif lower == "/workflow" or lower.startswith("/workflow "):
+        from core.command_handler import handle_workflow_command
+
+        print(handle_workflow_command(command, root))
     elif lower in {"/exit", "/bye", "/q"}:
         print("Bye.")
         append_log(log_file, "SYSTEM", "Session closed by user.")
@@ -904,7 +911,21 @@ def build_orchestrator(
         mode_session=mode_session,
     )
 
-    return AgentOrchestrator(context)
+    from workflows import WorkflowEngine, default_registry
+    from workflows.project_context import ProjectContextAdapter, TaskSystemAdapter
+
+    workflow_engine = WorkflowEngine(
+        root,
+        default_registry(),
+        confirmation_manager=context.confirmation_manager,
+        project_context=ProjectContextAdapter(root, context),
+        task_adapter=TaskSystemAdapter(root),
+    )
+
+    return AgentOrchestrator(
+        context,
+        workflow_engine=workflow_engine,
+    )
 
 
 def build_command_executor(
@@ -950,6 +971,25 @@ def build_command_executor(
             request.route.normalized_command,
         )
 
+    def workflow_adapter(
+        request: CommandExecutionRequest,
+    ) -> None:
+        from core.command_handler import handle_workflow_command
+
+        print(
+            handle_workflow_command(
+                request.route.normalized_command,
+                context.project_root,
+                confirmation_manager=context.confirmation_manager,
+                execution_context=context,
+            )
+        )
+        append_log(
+            context.log_file,
+            "COMMAND",
+            request.route.normalized_command,
+        )
+
     registry = {
         target: legacy_adapter
         for target in CommandTarget
@@ -959,6 +999,7 @@ def build_command_executor(
         }
     }
     registry[CommandTarget.DOCS] = docs_adapter
+    registry[CommandTarget.WORKFLOW] = workflow_adapter
 
     return CommandExecutor(registry)
 
@@ -1050,6 +1091,11 @@ def main() -> int:
         if result.kind is OrchestrationKind.EMPTY:
             continue
 
+        if result.kind is OrchestrationKind.WORKFLOW_DRAFT:
+            print(result.message)
+            append_log(log_file, "WORKFLOW", result.message)
+            continue
+
         append_log(
             context.log_file,
             "USER",
@@ -1137,6 +1183,9 @@ def main() -> int:
                 "Unsupported orchestration result: "
                 f"{result.kind!r}."
             )
+
+        if result.message:
+            print(result.message)
 
         model = load_model_name(
             context.project_root

@@ -20,6 +20,10 @@ data/index/
 
 # Local runtime state
 data/project_state/journal.jsonl
+data/workflows/active/*.json
+data/workflows/history/*.json
+!data/workflows/active/.gitkeep
+!data/workflows/history/.gitkeep
 
 # Local Patch Tools state and backups
 data/patches/

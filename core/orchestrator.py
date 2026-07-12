@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from core.command_router import CommandRoute, CommandRouter
 from core.confirmation_manager import ConfirmationResult
@@ -23,6 +24,7 @@ class OrchestrationKind(str, Enum):
     COMMAND = "command"
     CONFIRMATION = "confirmation"
     WAITING_CONFIRMATION = "waiting_confirmation"
+    WORKFLOW_DRAFT = "workflow_draft"
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,7 @@ class OrchestrationResult:
     command_route: CommandRoute | None = None
     confirmation_result: ConfirmationResult | None = None
     message: str = ""
+    workflow_run: Any = None
 
     @property
     def should_call_model(self) -> bool:
@@ -55,6 +58,7 @@ class AgentOrchestrator:
         *,
         intent_router: IntentRouter | None = None,
         command_router: CommandRouter | None = None,
+        workflow_engine: Any = None,
     ) -> None:
         if not isinstance(context, ExecutionContext):
             raise TypeError(
@@ -80,6 +84,7 @@ class AgentOrchestrator:
         self.context = context
         self.intent_router = intent_router or IntentRouter()
         self.command_router = command_router or CommandRouter()
+        self.workflow_engine = workflow_engine
 
     def process(self, text: str) -> OrchestrationResult:
         """Process one raw user input without invoking the model."""
@@ -139,9 +144,33 @@ class AgentOrchestrator:
             )
 
         if intent.kind is IntentKind.CHAT:
+            message = ""
+            if intent.workflow_selection_required:
+                message = "Coding request is ambiguous. Choose workflow: " + ", ".join(intent.workflow_candidates) + "."
+            elif intent.suggested_workflow:
+                message = f"Suggested coding workflow: {intent.suggested_workflow}. You may change it before any write action."
+                if self.workflow_engine is not None:
+                    try:
+                        workflow_run = self.workflow_engine.start(
+                            intent.suggested_workflow,
+                            intent.normalized_text,
+                        )
+                    except Exception as exc:
+                        message += f" Draft workflow was not created: {exc}"
+                    else:
+                        return OrchestrationResult(
+                            kind=OrchestrationKind.WORKFLOW_DRAFT,
+                            intent=intent,
+                            message=(
+                                message
+                                + f" Draft {workflow_run.workflow_id} is waiting for a patch."
+                            ),
+                            workflow_run=workflow_run,
+                        )
             return OrchestrationResult(
                 kind=OrchestrationKind.CHAT,
                 intent=intent,
+                message=message,
             )
 
         raise RuntimeError(

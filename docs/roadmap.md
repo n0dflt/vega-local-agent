@@ -95,4 +95,15 @@ Completed scope:
 * Runtime integration through compatibility adapters.
 * Read-only command integration for `/file`, `/git`, and `/tools list`.
 
-Next stage: `v2.2.0 — Coding Workflows`.
+## v2.2.0 release status
+
+Status: `implementation complete, pending release review`
+
+Implemented scope:
+
+* Persistent feature, bugfix, and refactor workflows.
+* Explicit confirmation before patch application.
+* Active/history storage, resume, cancellation, and final reports.
+* Deterministic `/workflow` command routing.
+
+Next stage: `v2.3.0 — Controlled Test–Fix Loop`.

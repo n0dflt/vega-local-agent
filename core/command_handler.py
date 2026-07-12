@@ -122,6 +122,112 @@ RELEASE_HELP = """Release Manager commands:
 Release Manager is read-only.
 It cannot commit, tag, push, or publish a GitHub release."""
 
+WORKFLOW_HELP = """Coding Workflow commands:
+  /workflow list
+  /workflow start feature <task>
+  /workflow start bugfix <task>
+  /workflow start refactor <task>
+  /workflow attach-patch <pending_patch_id>
+  /workflow link-task <task_id>
+  /workflow status
+  /workflow resume
+  /workflow confirm
+  /workflow cancel
+  /workflow history"""
+
+
+def handle_workflow_command(
+    command: str,
+    project_root=None,
+    *,
+    confirmation_manager=None,
+    engine=None,
+    execution_context=None,
+) -> str:
+    """Execute one deterministic coding-workflow command."""
+    from pathlib import Path
+
+    from workflows import WorkflowEngine, default_registry
+    from workflows.models import WorkflowError
+    from workflows.project_context import ProjectContextAdapter
+
+    if engine is None:
+        engine = WorkflowEngine(
+            Path(project_root) if project_root is not None else Path.cwd(),
+            default_registry(),
+            confirmation_manager=confirmation_manager,
+            project_context=ProjectContextAdapter(
+                Path(project_root) if project_root is not None else Path.cwd(),
+                execution_context,
+            ),
+        )
+
+    try:
+        parts = shlex.split(command, posix=False)
+    except ValueError as exc:
+        return f"Workflow command error: {exc}"
+    if len(parts) == 1:
+        return WORKFLOW_HELP
+    action = parts[1].lower()
+    try:
+        if action == "list" and len(parts) == 2:
+            return "Available workflows:\n" + "\n".join(f"  {name}" for name in engine.list_workflows())
+        if action == "start":
+            if len(parts) < 4:
+                return "Usage: /workflow start <feature|bugfix|refactor> [--patch <pending_patch_id>] <task>"
+            workflow_type = parts[2].lower()
+            patch_id = None
+            task_start = 3
+            if parts[3].lower() == "--patch":
+                if len(parts) < 6:
+                    return "Usage: /workflow start <type> --patch <pending_patch_id> <task>"
+                patch_id = parts[4].strip().strip('"')
+                task_start = 5
+            task = " ".join(parts[task_start:]).strip().strip('"')
+            run = engine.start(workflow_type, task, patch_id=patch_id)
+            return _workflow_text(run)
+        if action == "attach-patch" and len(parts) == 3:
+            return _workflow_text(engine.attach_patch(parts[2].strip().strip('"')))
+        if action == "link-task" and len(parts) == 3:
+            return _workflow_text(engine.link_task(parts[2].strip().strip('"')))
+        if action == "status" and len(parts) == 2:
+            run = engine.status()
+            return "No active workflow." if run is None else _workflow_text(run)
+        if action == "resume" and len(parts) == 2:
+            return _workflow_text(engine.resume())
+        if action == "confirm" and len(parts) == 2:
+            return _workflow_text(engine.confirm())
+        if action == "cancel" and len(parts) == 2:
+            return _workflow_text(engine.cancel())
+        if action == "history" and len(parts) == 2:
+            history = engine.history()
+            if not history:
+                return "Workflow history is empty."
+            return "Workflow history:\n" + "\n".join(
+                f"  {run.workflow_id} {run.workflow_type} {run.status.value} - {run.task}"
+                for run in history
+            )
+    except (WorkflowError, TypeError, ValueError) as exc:
+        return f"Workflow error: {exc}"
+    return WORKFLOW_HELP
+
+
+def _workflow_text(run) -> str:
+    lines = [
+        f"Workflow: {run.workflow_type}",
+        f"ID: {run.workflow_id}",
+        f"Task: {run.task}",
+        f"Status: {run.status.value}",
+        f"Progress: {run.current_step}/{len(run.steps)}",
+    ]
+    if run.status.value == "waiting_confirmation":
+        lines.append("Explicit confirmation required: /workflow confirm or /workflow cancel")
+    if run.status.value == "waiting_patch":
+        lines.append("Attach a pending Patch Tools artifact: /workflow attach-patch <pending_patch_id>")
+    if run.error:
+        lines.append(f"Error: {run.error}")
+    return "\n".join(lines)
+
 
 MODE_HELP = """Agent Mode commands:
   /mode                  Show the active mode

@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.2.0 - Coding Workflows
+
+Added:
+
+* Persistent workflow models, registry, engine, and active/history storage.
+* Feature, bugfix, and behavior-preserving refactor workflows.
+* `/workflow` list, start, status, resume, confirm, cancel, and history commands.
+* State, persistence, confirmation, CLI, and compatibility tests.
+
+Changed:
+
+* Coding tasks can use an ordered, resumable process built on existing context,
+  Patch Tools, Test Tools, and confirmation layers.
+* Current version updated to v2.2.0.
+
+Security:
+
+* File changes remain blocked until explicit confirmation.
+* Only one workflow may be active, and verification is executed at most once.
+* Terminal workflow states cannot be resumed.
+
 ## v2.1.0 - Structured Command Execution and Controlled Tool Orchestration
 
 Added:

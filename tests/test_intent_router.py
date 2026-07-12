@@ -39,6 +39,24 @@ class IntentRouterTests(unittest.TestCase):
             "Исправь ошибку в проекте",
         )
 
+    def test_ordinary_coding_text_suggests_workflows(self) -> None:
+        cases = {
+            "Implement new feature for export": "feature",
+            "Fix parser error": "bugfix",
+            "Refactor parser without changing behavior": "refactor",
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                intent = self.router.route(text)
+                self.assertEqual(intent.suggested_workflow, expected)
+                self.assertFalse(intent.workflow_selection_required)
+
+    def test_ambiguous_coding_text_requires_selection(self) -> None:
+        intent = self.router.route("Refactor parser and add new feature")
+        self.assertIsNone(intent.suggested_workflow)
+        self.assertTrue(intent.workflow_selection_required)
+        self.assertEqual(set(intent.workflow_candidates), {"feature", "refactor"})
+
     def test_command_is_routed_as_command(self) -> None:
         intent = self.router.route(
             "/status"

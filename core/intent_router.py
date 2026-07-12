@@ -32,6 +32,9 @@ class RoutedIntent:
     command_name: str | None = None
     command_arguments: str = ""
     confirmation_decision: ConfirmationDecision | None = None
+    suggested_workflow: str | None = None
+    workflow_candidates: tuple[str, ...] = ()
+    workflow_selection_required: bool = False
 
     @property
     def is_empty(self) -> bool:
@@ -107,11 +110,26 @@ class IntentRouter:
                 command_arguments=command_arguments,
             )
 
+        suggested, candidates = self._classify_coding_workflow(normalized_text)
         return RoutedIntent(
             kind=IntentKind.CHAT,
             raw_text=text,
             normalized_text=normalized_text,
+            suggested_workflow=suggested,
+            workflow_candidates=candidates,
+            workflow_selection_required=len(candidates) > 1,
         )
+
+    @staticmethod
+    def _classify_coding_workflow(text: str) -> tuple[str | None, tuple[str, ...]]:
+        lowered = text.lower()
+        keywords = {
+            "feature": ("add ", "implement ", "new feature", "добав", "реализ", "новая функц"),
+            "bugfix": ("bug", "fix ", "error", "broken", "ошиб", "баг", "исправ"),
+            "refactor": ("refactor", "restructure", "without changing behavior", "рефактор", "без изменения поведения", "изменить структуру"),
+        }
+        matches = tuple(name for name, words in keywords.items() if any(word in lowered for word in words))
+        return (matches[0] if len(matches) == 1 else None), matches
 
     @classmethod
     def _confirmation_decision(

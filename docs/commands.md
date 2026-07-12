@@ -67,7 +67,7 @@ Git Tools in v1.4.0 are read-only. Commit, tag, push, pull, checkout, reset, mer
 <!-- VEGA DOCGEN START: commands -->
 ## Generated command reference
 
-Project version: `v2.1.0`
+Project version: `v2.2.0`
 
 This section is generated from `scripts/vega.py`.
 
@@ -92,6 +92,7 @@ This section is generated from `scripts/vega.py`.
 /web
 /docgen
 /release
+/workflow
 /exit
 /patch
 /git
@@ -150,6 +151,8 @@ This section is generated from `scripts/vega.py`.
 /release status         Show release readiness.
 /release check          Run configured release checks.
 /release notes          Build release notes draft.
+/workflow              Show Coding Workflow help.
+/workflow start ...    Start feature, bugfix, or refactor workflow.
 /workspace              Show workspace state
 /task                   Show task command help
 /exit                   Exit VEGA
@@ -197,3 +200,24 @@ Read-only command-to-tool mappings are fixed in code:
 ```
 
 There is no `/tools run` command and no user-controlled registered tool name.
+
+## v2.2 coding workflow commands
+
+```text
+/workflow list
+/workflow start feature "<task>"
+/workflow start bugfix "<task>"
+/workflow start refactor "<task>"
+/workflow attach-patch <pending_patch_id>
+/workflow link-task <task_id>
+/workflow status
+/workflow resume
+/workflow confirm
+/workflow cancel
+/workflow history
+```
+
+Start analyzes and plans the task without writes, persists the draft, and stops at
+`waiting_patch`. `attach-patch` validates a pending artifact and stops at
+`waiting_confirmation`. Only `/workflow confirm` applies it. `link-task` is the
+only workflow command allowed to copy the workflow plan into an existing task.

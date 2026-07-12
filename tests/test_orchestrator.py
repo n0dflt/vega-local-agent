@@ -232,5 +232,36 @@ class AgentOrchestratorTests(unittest.TestCase):
             AgentOrchestrator(None)
 
 
+    def test_coding_workflow_suggestion_is_visible(self) -> None:
+        result = self.orchestrator.process("Fix parser error")
+        self.assertEqual(result.intent.suggested_workflow, "bugfix")
+        self.assertIn("bugfix", result.message)
+
+    def test_ambiguous_coding_request_asks_for_choice(self) -> None:
+        result = self.orchestrator.process("Refactor parser and add new feature")
+        self.assertTrue(result.intent.workflow_selection_required)
+        self.assertIn("Choose workflow", result.message)
+
+    def test_ordinary_coding_text_creates_read_only_draft(self) -> None:
+        from workflows import WorkflowEngine, default_registry
+        from workflows.models import WorkflowStatus
+
+        engine = WorkflowEngine(self.project_root, default_registry())
+        orchestrator = AgentOrchestrator(self.context, workflow_engine=engine)
+        result = orchestrator.process("Fix parser error")
+        self.assertEqual(result.kind, OrchestrationKind.WORKFLOW_DRAFT)
+        self.assertEqual(result.workflow_run.status, WorkflowStatus.WAITING_PATCH)
+        self.assertIsNone(result.workflow_run.patch)
+
+    def test_ambiguous_text_does_not_create_draft(self) -> None:
+        from workflows import WorkflowEngine, default_registry
+
+        engine = WorkflowEngine(self.project_root, default_registry())
+        orchestrator = AgentOrchestrator(self.context, workflow_engine=engine)
+        result = orchestrator.process("Refactor parser and add new feature")
+        self.assertEqual(result.kind, OrchestrationKind.CHAT)
+        self.assertIsNone(engine.status())
+
+
 if __name__ == "__main__":
     unittest.main()

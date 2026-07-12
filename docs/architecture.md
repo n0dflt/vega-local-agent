@@ -152,7 +152,7 @@ VEGA не должна:
 <!-- VEGA DOCGEN START: architecture -->
 ## Generated project snapshot
 
-Project version: `v2.1.0`
+Project version: `v2.2.0`
 
 This section is generated from the current project tree.
 
@@ -165,6 +165,7 @@ This section is generated from the current project tree.
 - `logs/`
 - `memory/`
 - `ollama/`
+- `planner/`
 - `prompts/`
 - `rag/`
 - `scripts/`
@@ -172,6 +173,7 @@ This section is generated from the current project tree.
 - `tools/`
 - `ui/`
 - `web_demo/`
+- `workflows/`
 
 ### Core modules
 
@@ -253,3 +255,25 @@ AgentOrchestrator
 ```
 
 The runtime owns one `ToolExecutor` for the session and passes it through the command compatibility adapter. Only `/file`, `/git`, and `/tools list` use this tool-execution path. The model and orchestrator do not receive the executor.
+
+## Coding Workflows
+
+```text
+IntentRouter -> CommandRouter -> WorkflowRegistry -> WorkflowEngine
+    -> project context / planner -> Patch Tools -> confirmation -> Test Tools
+```
+
+`workflows/` owns models, transitions, persistence, ordered execution, and the
+three coding definitions. Active state is written atomically; terminal runs move
+from `data/workflows/active/` to `data/workflows/history/`.
+
+`ProjectContextAdapter` reads the actual workspace tree, entrypoints, related
+files, tests, documentation, active mode, and current Project Control Layer task.
+`TaskSystemAdapter` stores the generated workflow plan through the existing
+`TaskManager`; it is not a second task store. `TaskPlanner` remains separate
+because `TaskManager` validates and persists user task plans but does not derive a
+plan from workflow type, task text, and project context.
+
+Every run persists structured `WorkflowStep` records and artifacts. Production
+Patch and Test adapters fail closed. Recovery inspects persisted step results and
+Patch Tools state so an applied patch is never applied twice.

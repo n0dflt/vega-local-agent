@@ -137,6 +137,7 @@ class CommandRouterTests(unittest.TestCase):
             "/mode",
             "/docgen",
             "/release",
+            "/workflow",
             "/exit",
             "/bye",
             "/q",

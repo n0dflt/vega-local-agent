@@ -4,7 +4,7 @@ VEGA is a local project coding-agent for working with code, project structure, l
 
 ## Current version
 
-v2.1.0
+v2.2.0
 
 ## Features
 
@@ -560,7 +560,7 @@ The predefined test group is:
 Current stable checkpoint:
 
 ```text
-v2.1.0 - Structured Command Execution and Controlled Tool Orchestration.
+v2.2.0 - Coding Workflows.
 ```
 
 Next planned stage:
@@ -610,3 +610,30 @@ Slash commands now move from deterministic routing through `CommandExecutionRequ
 The read-only `/file`, `/git`, and `/tools list` command paths use one controlled `ToolExecutor` for each runtime session. Command handlers select fixed registered tool names; users cannot supply an arbitrary tool name.
 
 The model and `AgentOrchestrator` do not receive `ToolExecutor`. Automatic model-driven tool calling and autonomous execution loops are not included in v2.1.0.
+
+## VEGA v2.2.0 - Coding Workflows
+
+VEGA provides persistent, confirmation-gated `feature`, `bugfix`, and `refactor`
+workflows. Runs persist under `data/workflows/active/` and terminal runs move to
+`data/workflows/history/`.
+
+```text
+/workflow list
+/workflow start feature "<task>"
+/workflow start bugfix "<task>"
+/workflow start refactor "<task>"
+/workflow attach-patch <pending_patch_id>
+/workflow link-task <task_id>
+/workflow status
+/workflow resume
+/workflow confirm
+/workflow cancel
+/workflow history
+```
+
+Start performs only read-only analysis and planning, then stops at `waiting_patch`.
+`attach-patch` accepts only a real pending Patch Tools artifact and advances to
+`waiting_confirmation` without changing files. No patch is applied before explicit
+confirmation. The optional legacy `--patch` start form remains confirmation-gated.
+Task plans remain inside the workflow unless `/workflow link-task <task_id>` is
+invoked explicitly.
