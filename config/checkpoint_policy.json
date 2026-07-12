@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "hash_algorithm": "sha256",
+  "max_checkpoints_per_workflow": 30,
+  "max_payload_bytes": 2097152,
+  "fail_closed_on_invalid_checkpoint": true,
+  "allowed_reasons": [
+    "workflow_started",
+    "state_transition",
+    "before_patch_apply",
+    "after_patch_apply",
+    "verification_recorded",
+    "review_recorded",
+    "manual"
+  ]
+}
