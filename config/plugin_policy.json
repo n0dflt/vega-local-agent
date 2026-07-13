@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "fail_closed": true,
+  "allowed_modules": [],
+  "allowed_plugins": [],
+  "allowed_package_prefixes": [
+    "plugins.builtin"
+  ],
+  "trusted_roots": [
+    "plugins/builtin"
+  ],
+  "allow_file_paths": false,
+  "allow_entry_points": false,
+  "max_plugins": 16
+}

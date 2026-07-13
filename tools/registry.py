@@ -1,6 +1,12 @@
-"""Registry of tools available to VEGA."""
+"""Registry of built-in tools and safe construction of combined registries."""
 
 from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
+from typing import Any
+
+from permissions.models import PermissionValidationError, validate_tool_name
 
 from core.internet_state import (
     is_internet_enabled,
@@ -57,7 +63,7 @@ from tools.test_tools import (
 from tools.web_tools import fetch_url
 
 
-TOOL_REGISTRY = {
+_BUILTIN_TOOL_REGISTRY = {
     # Safe File Tools
     "list_dir": list_dir,
     "read_file": read_file,
@@ -111,6 +117,41 @@ TOOL_REGISTRY = {
     "release_check": run_release_check,
     "release_notes": build_release_notes,
 }
+
+BUILTIN_TOOL_REGISTRY = MappingProxyType(_BUILTIN_TOOL_REGISTRY)
+
+# Compatibility registry used by all existing v2.7 imports. Plugin bootstrap
+# never mutates this object.
+TOOL_REGISTRY = dict(_BUILTIN_TOOL_REGISTRY)
+
+
+def build_tool_registry(
+    plugin_tools: Mapping[str, Callable[..., Any]] | None = None,
+) -> dict[str, Callable[..., Any]]:
+    """Return a new built-in-plus-plugin mapping without mutating globals."""
+
+    combined = dict(_BUILTIN_TOOL_REGISTRY)
+    if plugin_tools is None:
+        return combined
+    if not isinstance(plugin_tools, Mapping):
+        raise TypeError("plugin_tools must implement the Mapping interface")
+    for name, handler in plugin_tools.items():
+        try:
+            normalized_name = validate_tool_name(name)
+        except PermissionValidationError as exc:
+            raise ValueError(f"Invalid plugin tool name: {exc}") from exc
+        if not callable(handler):
+            raise TypeError(f"Plugin tool {normalized_name!r} must be callable")
+        if normalized_name in combined:
+            raise ValueError(f"Tool name collision: {normalized_name!r}")
+        combined[normalized_name] = handler
+    return combined
+
+
+def list_builtin_tools() -> tuple[str, ...]:
+    """Return immutable, sorted names from the private built-in source."""
+
+    return tuple(sorted(_BUILTIN_TOOL_REGISTRY))
 
 
 def get_tool(name: str):
