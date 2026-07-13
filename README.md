@@ -10,7 +10,7 @@ gates.
 ## Current version
 
 ```text
-v2.7.1 - Documentation and Licensing Patch
+v2.7.2 - UTF-8 Documentation Fix
 ```
 
 The latest functional feature release is:
@@ -81,6 +81,7 @@ NOTICE
 ```
 
 Copyright 2026 n0dflt.
+
 ## Requirements
 
 * Windows
@@ -187,7 +188,7 @@ python scripts\vega.py
 /q
 ```
 
-## VEGA v1.2.0 РІР‚вЂќ Safe File Tools
+## VEGA v1.2.0 вЂ” Safe File Tools
 
 VEGA provides read-only tools for listing project directories, reading bounded UTF-8
 text files, finding files, searching text, and creating deterministic file summaries.
@@ -465,7 +466,7 @@ Expected result:
 Result: OK
 ```
 
-## VEGA v1.7.0 вЂ” Safe Terminal Tools
+## VEGA v1.7.0 — Safe Terminal Tools
 
 Safe Terminal Tools execute only predefined local diagnostics, compilation, and
 automated checks. Arbitrary shell commands and user-supplied argv are not supported.
@@ -498,7 +499,7 @@ Editing the JSON policy does not bypass built-in executable and path validation.
 Dangerous executables, absolute paths, parent traversal, UNC paths, symlink escapes,
 and additional CLI arguments remain blocked.
 
-## VEGA v1.8.0 вЂ” Test Runner
+## VEGA v1.8.0 — Test Runner
 
 Test Runner executes predefined pytest groups through the Safe Terminal Tools
 layer. Arbitrary pytest arguments, custom test paths, and shell commands are

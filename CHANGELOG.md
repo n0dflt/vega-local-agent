@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.7.2 - UTF-8 Documentation Fix
+
+Fixed:
+
+* Restored valid UTF-8 text in README.md.
+* Restored valid UTF-8 Cyrillic text in docs/roadmap.md.
+* Removed mojibake introduced while editing documentation through Windows PowerShell.
+* Added a release test that rejects known encoding-corruption markers.
+
+Changed:
+
+* Runtime and documentation identity updated from v2.7.1 to v2.7.2.
+
+Security:
+
+* No runtime, permission, workflow, tool-routing, or execution behavior changed.
+
 ## v2.7.1 - Documentation and Licensing Patch
 
 Added:

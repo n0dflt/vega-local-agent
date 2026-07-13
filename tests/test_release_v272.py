@@ -18,9 +18,9 @@ from tools.registry import TOOL_REGISTRY
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class ReleaseV271Tests(unittest.TestCase):
+class ReleaseV272Tests(unittest.TestCase):
     def test_version_identity_and_release_documentation_are_synchronized(self):
-        self.assertEqual(VERSION, "v2.7.1")
+        self.assertEqual(VERSION, "v2.7.2")
 
         for relative in (
             "README.md",
@@ -29,7 +29,7 @@ class ReleaseV271Tests(unittest.TestCase):
         ):
             with self.subTest(relative=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("v2.7.1", text)
+                self.assertIn("v2.7.2", text)
 
     def test_apache_license_files_exist(self):
         license_path = ROOT / "LICENSE"
@@ -127,6 +127,26 @@ class ReleaseV271Tests(unittest.TestCase):
             ConfirmationManager,
             ToolConfirmationManager,
         )
+
+    def test_documentation_contains_no_known_mojibake_markers(self):
+        markers = (
+            "????",
+            "????",
+            "????",
+            "???",
+        )
+
+        for relative in (
+            "README.md",
+            "docs/roadmap.md",
+        ):
+            with self.subTest(relative=relative):
+                text = (ROOT / relative).read_text(
+                    encoding="utf-8"
+                )
+
+                for marker in markers:
+                    self.assertNotIn(marker, text)
 
 
 if __name__ == "__main__":
