@@ -62,3 +62,5 @@ logs/terminal/
 
 # Runtime web audit logs
 logs/web/*.jsonl
+
+data/checkpoints/
