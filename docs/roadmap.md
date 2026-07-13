@@ -161,3 +161,37 @@ Completed scope:
 * Evidence-backed synthesis for supported completed reads.
 
 Next stage: `v2.8.0 - Plugin and Domain API`.
+
+## v2.8.0 release status
+
+Status: `implementation in progress`
+
+Implemented scope:
+
+* Immutable domain definitions and deterministic domain registration.
+* Built-in coding and research domain metadata.
+* Strict plugin manifests and validation.
+* Fail-closed allowlists, trusted roots, and component-by-component `PathFinder`
+  provenance validation before source-module execution.
+* Two-phase manifest collection and immutable bootstrap result models.
+* Loaded/inactive/active tool state with permission and capability gates.
+* Isolated combined tool registry construction.
+* A supported runtime factory requiring the existing `PermissionEvaluator` and
+  returning the existing `ToolExecutor`.
+
+Not included:
+
+* Plugin marketplace.
+* Installation from GitHub or PyPI.
+* File-path plugin loading.
+* Python entry-point discovery.
+* Hot reload.
+* Automatic permission-policy modification.
+* Automatic contextual-routing metadata modification.
+
+Known limitation:
+
+* Python module import and plugin factory side effects cannot be rolled back;
+  the Plugin API is not a sandbox and is limited to explicitly trusted code.
+  Resolver cleanup is limited to modules and parent attributes published by the
+  failing resolver call.

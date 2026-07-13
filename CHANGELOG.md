@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+Added:
+
+* Immutable domain definitions and deterministic, independent domain registries.
+* Built-in `coding` and `research` domain metadata covering current v2.7 intents.
+* Immutable plugin manifests and tools with strict permission, capability,
+  version, domain, and handler validation.
+* Fail-closed plugin policy parsing and UTF-8-SIG policy loading.
+* Exact-allowlist, package-prefix, trusted-root, and module-origin validation for
+  trusted Python modules.
+* Trusted-root-scoped dotted-module resolution that validates every parent
+  package with explicit `PathFinder` search paths before executing source specs.
+* Two-phase manifest collection and publication with immutable activation and
+  bootstrap result models.
+* Safe construction of isolated built-in and plugin tool registries.
+* A supported plugin runtime factory that requires `PermissionEvaluator` while
+  reusing the existing `ToolExecutor`.
+* Tests for provenance, activation, multi-plugin failures, immutable state, and
+  permission-enforced runtime construction.
+
+Changed:
+
+* Tool registry construction can produce an isolated combined registry without
+  mutating the production `TOOL_REGISTRY`.
+* Loaded tools enter the combined registry only after explicit permission,
+  capability, domain, and collision checks.
+* Architecture and roadmap documentation describe the v2.8 Plugin and Domain API.
+
+Security:
+
+* Plugins are disabled by default.
+* File-path loading, Python entry points, and alternative factory hooks are
+  forbidden.
+* The supported production plugin path requires `PermissionEvaluator`; trusted
+  Python code can still call a callable directly because this is not a sandbox.
+* Missing or denied permission rules and missing or mismatched routing metadata
+  keep handlers inactive and outside the combined registry.
+* Parent packages are resolved without global `sys.path`, and module origins,
+  files, package paths, and pre-existing `sys.modules` entries are checked before
+  and after execution. Namespace, built-in, frozen, extension, sourceless, zip,
+  and custom-loader modules are rejected.
+* The Plugin API is not a security sandbox and accepts only explicitly trusted
+  local modules.
+
 ## v2.7.2 - UTF-8 Documentation Fix
 
 Fixed:
@@ -35,6 +80,7 @@ Security:
 
 * No runtime, permission, tool-routing, workflow, or execution behavior was changed.
 * Existing fail-closed protections from v2.6.0 and v2.7.0 remain unchanged.
+
 ## v2.7.0 - Context-Aware Tool Orchestration
 
 Added:

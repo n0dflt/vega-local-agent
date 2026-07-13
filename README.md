@@ -856,3 +856,38 @@ existing deterministic result. Automatic synthesis retries are not used.
 Blocked, failed, project-search, preview, and `/plan run` paths never invoke
 contextual synthesis. Protected actions remain controlled by the Permission
 System and explicit confirmation policy.
+
+## Plugin and Domain API
+
+VEGA v2.8 introduces an architectural API for domains and trusted local plugin
+modules. A domain is immutable metadata that groups intents, capabilities, and
+the names of existing tools. The built-in `coding` and `research` definitions
+do not move or duplicate tool implementations and do not change the v2.7
+planner routes.
+
+A plugin is an immutable manifest returned by the one supported factory,
+`get_plugin_manifest()`. Plugins are disabled by default in
+`config/plugin_policy.json`. Enabling a module requires both an exact module
+allowlist entry, an allowed package prefix, and an origin inside an existing
+trusted root under the project root. The module origin is checked before and
+after execution. A trusted-root-scoped resolver walks every dotted-name package
+component with `PathFinder` and explicit project-local search paths, validates
+all parent packages before executing them, and then executes only the validated
+source specs. Namespace, built-in, frozen, extension, sourceless, zip, custom,
+path-based, and entry-point loading are not supported. Pre-existing
+`sys.modules` entries must match the validated origins, files, and package paths.
+
+Loading and activation are separate. A validated manifest remains loaded, but
+its tool becomes active only when its domain is enabled, an explicit non-deny
+permission rule exists, and contextual metadata exactly matches its routing
+permission and capabilities. Inactive handlers are absent from the combined
+registry. Bootstrap collects and validates the complete manifest set before it
+publishes immutable snapshots and mappings; import and factory side effects
+cannot be rolled back. Resolver failures remove only modules and parent
+attributes added by that resolver call; arbitrary Python side effects remain.
+
+The supported production plugin execution path is
+`build_plugin_tool_executor()`, which requires a `PermissionEvaluator` and uses
+the existing `ToolExecutor`. The Plugin API is not a sandbox: trusted Python
+code can still call a handler directly. Permission and contextual-routing
+configuration files are never modified automatically.

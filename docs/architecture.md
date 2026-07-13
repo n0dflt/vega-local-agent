@@ -307,3 +307,69 @@ production rule requires confirmation.
 `core/confirmation_manager.py` owns workflow/orchestrator confirmation state.
 `core/tool_confirmation.py` independently owns interactive tool-permission
 confirmation; neither system substitutes for or grants state to the other.
+
+## Plugin and Domain API
+
+The v2.8 architecture adds metadata and trusted-module extension boundaries
+without changing v2.7 intent planning:
+
+```text
+DomainRegistry
+    -> PluginPolicy
+        -> trusted-root and module-origin validation
+            -> PluginLoader (collect manifests only)
+                -> phase-one set and collision validation
+                    -> permission/capability activation gate
+                        -> immutable bootstrap result
+                            -> build_plugin_tool_executor
+                                -> ToolExecutor
+                                    -> PermissionEvaluator
+                                        -> callable handler
+```
+
+`DomainRegistry` validates all domain references before registration.
+`PluginPolicy` is disabled by default and permits imports only when a normalized
+dotted module is present in `allowed_modules` and matches an
+`allowed_package_prefixes` entry. Enabled policies also require relative trusted
+roots that resolve to existing directories inside the project root. The loader
+resolves each dotted component independently with `PathFinder.find_spec` and an
+explicit search path beginning at the project root and continuing through
+validated parent package locations. It never uses global `sys.path` to select a
+plugin chain. Only `SourceFileLoader` source modules and packages are accepted;
+namespace, built-in, frozen, extension, sourceless, zip, custom-loader,
+missing-loader, and out-of-root modules are rejected.
+
+The complete chain is validated before execution. Under a process-local reentrant
+lock, the resolver checks pre-existing `sys.modules` entries against the expected
+`module.__spec__.origin`, `module.__file__`, and package `module.__path__`, then
+executes only the previously validated specs with `module_from_spec` and
+`exec_module`. Child attributes are attached to a parent only after post-exec
+validation. On failure, only modules and attributes added by the current resolver
+call are removed; pre-existing modules remain untouched. `PluginLoader` supports only
+`get_plugin_manifest()` and returns a validated manifest without mutating a
+registry.
+
+Bootstrap first collects every manifest and validates limits, plugin names,
+tool names, built-in collisions, and domains. Only after the whole set passes
+does it create an internal registry and publish immutable manifest snapshots.
+Import and factory side effects are not transactional and cannot be rolled
+back. Resolver cleanup restores only its `sys.modules` and parent-attribute
+publication, not filesystem, network, process, or other effects performed by
+executed Python code.
+
+Every loaded tool receives a stable activation record. Missing or denied
+permission rules, disabled domains, absent capability entries, permission
+mismatches, and capability mismatches leave the tool inactive and outside the
+combined mapping. The built-in registry is a read-only view over a private
+source; the v2.7 `TOOL_REGISTRY` remains a separate compatibility copy.
+
+The supported production plugin execution path uses
+`build_plugin_tool_executor`, which requires a `PermissionEvaluator` and returns
+the existing `ToolExecutor`. The general Python API still permits trusted code
+to call a handler or construct a legacy executor directly; this API does not
+claim to prevent that outside the supported path.
+
+The Plugin API is **not a security sandbox**. Python import executes module-level
+code, so this is a controlled API for explicitly trusted local modules. The
+allowlist and origin checks reduce accidental or ambiguous loading; they do not
+make untrusted Python safe.
