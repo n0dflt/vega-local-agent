@@ -20,11 +20,16 @@ def create_coding_domain() -> DomainDefinition:
         capabilities=(
             "project.read",
             "project.write",
+            "project.search",
             "git.read",
+            "git.diff",
             "patch.manage",
+            "patch.propose",
             "test.run",
             "documentation.manage",
+            "documentation.status",
             "release.check",
+            "release.status",
         ),
         tool_names=(
             "list_dir", "read_file", "find_file", "search_in_files", "summarize_file",
