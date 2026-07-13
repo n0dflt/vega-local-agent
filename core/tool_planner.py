@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Tuple
@@ -188,4 +188,3 @@ def plan_tools(
             "planner": "deterministic-capability-router",
         },
     )
-

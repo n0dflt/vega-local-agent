@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from core.intent_analyzer import analyze_intent
 from core.tool_planner import (
@@ -166,4 +166,3 @@ def test_planner_never_invents_tool_name() -> None:
     assert plan.steps[0].tool_name == "safe_test_executor"
     assert plan.steps[0].tool_name != "pytest"
     assert plan.steps[0].arguments == {}
-
