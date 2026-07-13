@@ -1,4 +1,173 @@
 ﻿{
   "schema_version": 1,
-  "tools": {}
+  "tools": {
+    "documentation_check": {
+      "permission": "READ",
+      "capabilities": [
+        "documentation.check"
+      ],
+      "description": "Проверить состояние документации проекта."
+    },
+    "documentation_policy_load": {
+      "permission": "READ",
+      "capabilities": [
+        "documentation.policy.read"
+      ],
+      "description": "Прочитать политику документации."
+    },
+    "documentation_status": {
+      "permission": "READ",
+      "capabilities": [
+        "documentation.status"
+      ],
+      "description": "Получить статус документации и версии проекта."
+    },
+    "find_file": {
+      "permission": "READ",
+      "capabilities": [
+        "project.find"
+      ],
+      "description": "Найти файл внутри проекта."
+    },
+    "git_branch": {
+      "permission": "READ",
+      "capabilities": [
+        "git.branch"
+      ],
+      "description": "Получить текущую ветку Git."
+    },
+    "git_diff": {
+      "permission": "READ",
+      "capabilities": [
+        "git.diff"
+      ],
+      "description": "Прочитать незакоммиченные изменения Git."
+    },
+    "git_diff_cached": {
+      "permission": "READ",
+      "capabilities": [
+        "git.diff.cached"
+      ],
+      "description": "Прочитать staged-изменения Git."
+    },
+    "git_log": {
+      "permission": "READ",
+      "capabilities": [
+        "git.log"
+      ],
+      "description": "Прочитать историю Git."
+    },
+    "git_status": {
+      "permission": "READ",
+      "capabilities": [
+        "git.status"
+      ],
+      "description": "Получить статус рабочего дерева Git."
+    },
+    "internet_status": {
+      "permission": "READ",
+      "capabilities": [
+        "internet.status"
+      ],
+      "description": "Проверить состояние контролируемого интернета."
+    },
+    "list_dir": {
+      "permission": "READ",
+      "capabilities": [
+        "project.list"
+      ],
+      "description": "Показать содержимое папки проекта."
+    },
+    "list_patches": {
+      "permission": "READ",
+      "capabilities": [
+        "patch.list"
+      ],
+      "description": "Показать сохранённые записи патчей."
+    },
+    "memory_list": {
+      "permission": "READ",
+      "capabilities": [
+        "memory.list"
+      ],
+      "description": "Показать записи проектной памяти."
+    },
+    "memory_search": {
+      "permission": "READ",
+      "capabilities": [
+        "memory.search"
+      ],
+      "description": "Найти информацию в проектной памяти."
+    },
+    "memory_stats": {
+      "permission": "READ",
+      "capabilities": [
+        "memory.stats"
+      ],
+      "description": "Получить статистику проектной памяти."
+    },
+    "read_file": {
+      "permission": "READ",
+      "capabilities": [
+        "document.read"
+      ],
+      "description": "Прочитать файл внутри проекта."
+    },
+    "release_notes": {
+      "permission": "DRAFT",
+      "capabilities": [
+        "release.notes"
+      ],
+      "description": "Подготовить черновик release notes в памяти."
+    },
+    "release_policy_load": {
+      "permission": "READ",
+      "capabilities": [
+        "release.policy.read"
+      ],
+      "description": "Прочитать политику выпуска релизов."
+    },
+    "release_status": {
+      "permission": "READ",
+      "capabilities": [
+        "release.status"
+      ],
+      "description": "Получить безопасный статус готовности проекта к релизу."
+    },
+    "search_in_files": {
+      "permission": "READ",
+      "capabilities": [
+        "project.search"
+      ],
+      "description": "Найти текст внутри файлов проекта."
+    },
+    "show_patch": {
+      "permission": "READ",
+      "capabilities": [
+        "patch.show"
+      ],
+      "description": "Прочитать содержимое сохранённого патча."
+    },
+    "summarize_file": {
+      "permission": "READ",
+      "capabilities": [
+        "document.summarize"
+      ],
+      "description": "Прочитать и кратко изложить файл проекта."
+    },
+    "terminal_list": {
+      "permission": "READ",
+      "capabilities": [
+        "terminal.list"
+      ],
+      "description": "Показать разрешённые команды терминала."
+    },
+    "test_list": {
+      "permission": "READ",
+      "capabilities": [
+        "test.list"
+      ],
+      "description": "Показать доступные группы тестов."
+    }
+  }
 }

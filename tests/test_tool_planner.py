@@ -116,12 +116,12 @@ def test_bug_fix_plan_preserves_permission_levels() -> None:
     ) is True
 
 
-def test_planner_rejects_missing_capability() -> None:
+def test_code_review_uses_safe_git_diff_tool() -> None:
     analysis = analyze_intent(
         "Посмотри изменения и оцени риски"
     )
 
-    incomplete_catalog = (
+    catalog = (
         ToolDescriptor(
             name="git.show_diff",
             permission="READ",
@@ -129,11 +129,11 @@ def test_planner_rejects_missing_capability() -> None:
         ),
     )
 
-    with pytest.raises(
-        ToolPlanningError,
-        match="code.review",
-    ):
-        plan_tools(analysis, incomplete_catalog)
+    plan = plan_tools(analysis, catalog)
+
+    assert len(plan.steps) == 1
+    assert plan.steps[0].tool_name == "git.show_diff"
+    assert plan.steps[0].required_permission == "READ"
 
 
 def test_planner_rejects_unknown_intent() -> None:
@@ -166,3 +166,4 @@ def test_planner_never_invents_tool_name() -> None:
     assert plan.steps[0].tool_name == "safe_test_executor"
     assert plan.steps[0].tool_name != "pytest"
     assert plan.steps[0].arguments == {}
+

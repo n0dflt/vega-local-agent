@@ -67,14 +67,13 @@ _INTENT_ROUTES: Mapping[IntentType, Tuple[str, ...]] = {
     ),
     IntentType.CODE_REVIEW: (
         "git.diff",
-        "code.review",
     ),
     IntentType.DOCUMENTATION_UPDATE: (
         "git.diff",
         "documentation.update",
     ),
     IntentType.RELEASE_CHECK: (
-        "release.check",
+        "release.status",
     ),
 }
 
@@ -189,3 +188,4 @@ def plan_tools(
             "planner": "deterministic-capability-router",
         },
     )
+
