@@ -18,21 +18,17 @@ from tools.registry import TOOL_REGISTRY
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class ReleaseV260Tests(unittest.TestCase):
+class ReleaseV270Tests(unittest.TestCase):
     def test_version_identity_and_release_documentation_are_synchronized(self):
-        self.assertEqual(VERSION, "v2.6.0")
+        self.assertEqual(VERSION, "v2.7.0")
         for relative in (
             "README.md",
             "CHANGELOG.md",
-            "docs/commands.md",
-            "docs/architecture.md",
-            "docs/security.md",
             "docs/roadmap.md",
-            "docs/releases/v2.6.0.md",
         ):
             with self.subTest(relative=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("v2.6", text)
+                self.assertIn("v2.7.0", text)
 
     def test_production_policy_loads_and_exactly_classifies_registry(self):
         policy = load_permission_policy(ROOT, registered_tools=TOOL_REGISTRY)

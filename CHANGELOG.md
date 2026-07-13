@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.7.0 - Context-Aware Tool Orchestration
+
+Added:
+
+* Deterministic intent analysis, task interpretation, argument binding,
+  capability-based tool planning, and structured execution plans.
+* Fail-closed production tool catalog and explicit routing policy.
+* Contextual plan preview and controlled explicit plan execution.
+* Evidence-backed response synthesis for document analysis and code review.
+* Dedicated tests for routing, planning, execution, formatting, and fallback behavior.
+
+Changed:
+
+* Supported natural-language requests can route to registered safe tools.
+* Document analysis uses only `read_file` with a validated relative path.
+* Code review uses `git_diff` with the existing workspace.
+* Empty diffs return `No unstaged changes.` without invoking the model.
+* Runtime and release identity updated to v2.7.0.
+
+Security:
+
+* The model receives no executor, registry, permissions, schemas, tokens,
+  or callable tools and cannot trigger further execution.
+* Unknown tools, invalid arguments, denied permissions, blocked paths, and
+  tool-reported failures remain fail closed.
+* Evidence is limited to 12,000 characters and synthesized output to 8,000.
+* Model failures return the deterministic tool result without retries.
+* Blocked, failed, project-search, preview, and `/plan run` paths do not synthesize.
+
 ## v2.6.0 - Permissions System
 
 Added:

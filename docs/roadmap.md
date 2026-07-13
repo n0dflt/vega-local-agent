@@ -119,7 +119,15 @@ Completed scope:
 * One-time tool confirmation and policy-limited process-local session grants.
 * `/permissions` grant lifecycle inspection and revocation commands.
 
-## v2.7.0 planned scope
+## v2.7.0 release status
 
-Model-driven and context-aware tool selection is planned for v2.7. It is not
-part of v2.6 and no v2.7 functionality is claimed by this release.
+Status: `release prepared`
+
+Completed scope:
+
+* Deterministic intent analysis and task interpretation.
+* Capability-based planning with safe argument binding.
+* Contextual preview and controlled tool execution.
+* Evidence-backed synthesis for supported completed reads.
+
+Next stage: `v2.8.0 - Plugin and Domain API`.

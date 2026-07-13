@@ -4,7 +4,7 @@ VEGA is a local project coding-agent for working with code, project structure, l
 
 ## Current version
 
-v2.6.0 - Permissions System
+v2.7.0 - Context-Aware Tool Orchestration
 
 ## Features
 
@@ -562,13 +562,13 @@ The predefined test group is:
 Current stable checkpoint:
 
 ```text
-v2.6.0 - Permissions System
+v2.7.0 - Context-Aware Tool Orchestration
 ```
 
 Next planned stage:
 
 ```text
-To be determined.
+v2.8.0 - Plugin and Domain API
 ```
 
 ## VEGA v1.12.0 - Release Manager
@@ -761,3 +761,51 @@ is never exposed to users or passed to tool callables.
 There is no `/permissions grant <tool_name>` command. Workflow confirmation in
 `core/confirmation_manager.py` remains separate from interactive tool-permission
 confirmation in `core/tool_confirmation.py`.
+
+## VEGA v2.7.0 - Context-Aware Tool Orchestration
+
+VEGA can interpret supported natural-language requests and map them
+deterministically to registered safe tools.
+
+The contextual pipeline separates:
+
+```text
+user request
+    -> intent analysis
+    -> task interpretation
+    -> capability-based planning
+    -> argument validation
+    -> permission evaluation
+    -> ToolExecutor
+    -> contextual response
+```
+
+The model does not receive the executor, tool registry, schemas,
+permissions, tokens, or callable tools. Model output cannot trigger
+additional tool execution.
+
+Document analysis plans only `read_file` with a validated safe relative
+path. Code review uses `git_diff` with the existing workspace.
+
+An empty Git diff returns:
+
+```text
+No unstaged changes.
+```
+
+without invoking the model.
+
+Contextual synthesis receives only the original request, resolved intent,
+selected tool name, bounded evidence, configured model name, and the
+injected Ollama chat callable.
+
+Evidence is limited to 12,000 characters. Accepted synthesized output is
+limited to 8,000 characters.
+
+If the model is unavailable, missing, returns an empty response, or raises
+an exception, VEGA preserves successful tool execution and returns the
+existing deterministic result. Automatic synthesis retries are not used.
+
+Blocked, failed, project-search, preview, and `/plan run` paths never invoke
+contextual synthesis. Protected actions remain controlled by the Permission
+System and explicit confirmation policy.
