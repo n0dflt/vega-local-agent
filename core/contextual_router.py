@@ -36,6 +36,7 @@ class ToolRoutingPolicy:
     """Validated policy controlling contextual tool routing."""
 
     enabled: bool
+    allow_explicit_execution: bool
     automatic_permissions: tuple[str, ...]
     confirmation_permissions: tuple[str, ...]
     max_tool_steps: int
@@ -126,6 +127,9 @@ class ContextualRouteResult:
             "plan": self.plan.to_dict(),
             "routing": {
                 "policy_enabled": self.policy.enabled,
+                "allow_explicit_execution": (
+                    self.policy.allow_explicit_execution
+                ),
                 "requires_confirmation": (
                     self.requires_confirmation
                 ),
@@ -190,6 +194,11 @@ def parse_tool_routing_policy(
         enabled=_require_bool(
             data,
             "enabled",
+            False,
+        ),
+        allow_explicit_execution=_require_bool(
+            data,
+            "allow_explicit_execution",
             False,
         ),
         automatic_permissions=_read_permissions(

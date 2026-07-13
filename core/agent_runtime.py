@@ -202,7 +202,7 @@ def help_text() -> str:
         "  /permissions grants    List active permission session grants.",
         "  /permissions revoke    Revoke one permission session grant.",
         "  /permissions clear     Clear permission session grants.",
-        "  /plan <task>           Preview contextual tool planning.",
+        "  /plan [run] <task>     Preview or explicitly run a safe plan.",
         "",
         "Task Console:",
         "/workspace              Show workspace state",
@@ -918,6 +918,7 @@ def handle_command(
             handle_plan_command(
                 command,
                 root,
+                tool_executor=tool_executor,
             )
         )
     elif lower == "/permissions" or lower.startswith("/permissions "):

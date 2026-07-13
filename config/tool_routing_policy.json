@@ -1,4 +1,4 @@
-﻿{
+{
   "enabled": false,
   "automatic_permissions": [
     "READ",
@@ -14,5 +14,6 @@
   "max_tool_steps": 8,
   "allow_arbitrary_tool_names": false,
   "allow_shell_generation": false,
-  "fail_closed": true
+  "fail_closed": true,
+  "allow_explicit_execution": true
 }
