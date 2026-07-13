@@ -1257,6 +1257,28 @@ def main() -> int:
         if result.message:
             print(result.message)
 
+        if not result.message:
+            from core.contextual_runtime import (
+                try_execute_contextual_request,
+            )
+
+            contextual_result = (
+                try_execute_contextual_request(
+                    result.intent.normalized_text,
+                    context.project_root,
+                    tool_executor,
+                )
+            )
+
+            if contextual_result.handled:
+                print(contextual_result.message)
+                append_log(
+                    context.log_file,
+                    "CONTEXTUAL",
+                    contextual_result.message,
+                )
+                continue
+
         model = load_model_name(
             context.project_root
         )
