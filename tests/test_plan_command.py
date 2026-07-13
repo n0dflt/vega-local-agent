@@ -100,7 +100,7 @@ def test_plan_builds_preview_without_execution(
     assert "Tool: search_in_files" in result
     assert "Permission: READ" in result
     assert "query: legacy_client" in result
-    assert str(tmp_path.resolve()) in result
+    assert "path: ." in result
     assert "Execution: preview only" in result
 
 
@@ -208,9 +208,7 @@ def test_plan_run_executes_safe_tool(
 
     assert len(calls) == 1
     assert calls[0]["query"] == "legacy_client"
-    assert calls[0]["path"] == str(
-        tmp_path.resolve()
-    )
+    assert calls[0]["path"] == "."
     assert "No matches found." in result
     assert "Tool: search_in_files" in result
 

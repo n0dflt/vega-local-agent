@@ -161,9 +161,7 @@ def test_enabled_safe_request_executes_tool(
     assert result.ok is True
     assert len(calls) == 1
     assert calls[0]["query"] == "legacy_client"
-    assert calls[0]["path"] == str(
-        tmp_path.resolve()
-    )
+    assert calls[0]["path"] == "."
     assert "No matches found." in result.message
 
 

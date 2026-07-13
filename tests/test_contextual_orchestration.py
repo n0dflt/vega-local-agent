@@ -38,7 +38,7 @@ def _policy() -> dict[str, object]:
     }
 
 
-def test_preview_uses_orchestrator_project_root(
+def test_preview_uses_safe_relative_search_path(
     tmp_path: Path,
 ) -> None:
     registry = {
@@ -65,7 +65,7 @@ def test_preview_uses_orchestrator_project_root(
     )
     assert result.plan.steps[0].arguments == {
         "query": "legacy_client",
-        "path": str(tmp_path.resolve()),
+        "path": ".",
     }
 
     assert result.policy.enabled is False

@@ -70,7 +70,7 @@ def test_document_path_is_bound_to_summary_tool() -> None:
     }
 
 
-def test_project_search_query_and_workspace_are_bound() -> None:
+def test_project_search_query_uses_safe_relative_path() -> None:
     analysis = analyze_intent(
         'Найди "legacy_client" в проекте'
     )
@@ -86,7 +86,7 @@ def test_project_search_query_and_workspace_are_bound() -> None:
     assert plan.steps[0].tool_name == "search_in_files"
     assert plan.steps[0].arguments == {
         "query": "legacy_client",
-        "path": "C:/project",
+        "path": ".",
     }
 
 

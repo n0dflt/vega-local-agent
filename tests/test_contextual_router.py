@@ -80,7 +80,7 @@ def test_preview_builds_plan_without_executing_tool() -> None:
     )
     assert result.plan.steps[0].arguments == {
         "query": "legacy_client",
-        "path": "C:/project",
+        "path": ".",
     }
     assert result.requires_confirmation is False
     assert result.can_auto_execute is False

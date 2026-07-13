@@ -88,5 +88,5 @@ def test_production_search_request_builds_safe_plan() -> None:
     assert step.required_permission == "READ"
     assert step.arguments == {
         "query": "legacy_client",
-        "path": str(ROOT),
+        "path": ".",
     }

@@ -60,7 +60,7 @@ def build_tool_arguments(
 
         return {
             "query": interpretation.search_query,
-            "path": normalized_workspace,
+            "path": ".",
         }
 
     if normalized_capability in {
