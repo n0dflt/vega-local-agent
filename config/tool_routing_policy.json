@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "automatic_permissions": [
     "READ",
     "DRAFT"

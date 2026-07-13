@@ -197,5 +197,5 @@ def test_production_preview_uses_real_registry() -> None:
     assert serialized["analysis"]["intent"] == (
         "code_review"
     )
-    assert serialized["routing"]["policy_enabled"] is False
-    assert serialized["routing"]["can_auto_execute"] is False
+    assert serialized["routing"]["policy_enabled"] is True
+    assert serialized["routing"]["can_auto_execute"] is True
