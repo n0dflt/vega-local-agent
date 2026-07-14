@@ -43,6 +43,7 @@
         "-m",
         "pytest",
         "-q",
+        "-rs",
         "-p",
         "no:cacheprovider",
         "--basetemp",
@@ -121,6 +122,16 @@
       "argv": [
         "python",
         "scripts\\check_policy_consistency.py"
+      ],
+      "timeout_seconds": 30,
+      "enabled": true
+    },
+    {
+      "id": "repository-hygiene",
+      "description": "Validate whitespace and generated-state Git hygiene.",
+      "argv": [
+        "python",
+        "scripts\\check_repository_hygiene.py"
       ],
       "timeout_seconds": 30,
       "enabled": true
