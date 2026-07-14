@@ -15,6 +15,10 @@ from tools.terminal_tools import (
 TEST_GROUP_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 TEST_GROUPS: dict[str, dict[str, str]] = {
+    "workflow": {
+        "command_id": "tests-workflow",
+        "description": "Run the focused controlled-workflow safety suite.",
+    },
     "all": {
         "command_id": "tests",
         "description": "Run all VEGA tests.",

@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
+from workflows.controlled_models import ControlledWorkflowState
 from workflows.models import WorkflowRun, WorkflowStatus, validate_workflow_id
 
 
@@ -110,7 +111,11 @@ class WorkflowCheckpoint:
             status = WorkflowStatus(self.workflow_status)
             if not isinstance(self.workflow_payload, dict):
                 raise CheckpointValidationError("workflow_payload must be an object.")
-            restored = WorkflowRun.from_dict(self.workflow_payload)
+            restored = (
+                ControlledWorkflowState.from_dict(self.workflow_payload)
+                if self.workflow_payload.get("schema_version") == 2
+                else WorkflowRun.from_dict(self.workflow_payload)
+            )
             if restored.to_dict() != self.workflow_payload:
                 raise CheckpointValidationError("workflow_payload must be a complete serialized WorkflowRun.")
             if restored.workflow_id != self.workflow_id:
@@ -143,7 +148,7 @@ class WorkflowCheckpoint:
     @classmethod
     def create(
         cls,
-        run: WorkflowRun,
+        run: WorkflowRun | ControlledWorkflowState,
         reason: CheckpointReason | str,
         sequence: int,
         *,
@@ -151,19 +156,22 @@ class WorkflowCheckpoint:
         checkpoint_id: str | None = None,
         created_at: str | None = None,
     ) -> "WorkflowCheckpoint":
-        if not isinstance(run, WorkflowRun):
-            raise CheckpointValidationError("run must be a WorkflowRun.")
+        if not isinstance(run, (WorkflowRun, ControlledWorkflowState)):
+            raise CheckpointValidationError("run must be a supported workflow state")
         try:
             normalized_reason = CheckpointReason(reason)
         except (TypeError, ValueError) as exc:
             raise CheckpointValidationError("Unsupported checkpoint reason.") from exc
         payload = run.to_dict()
         patch_ids: list[str] = []
-        candidates = [
-            (run.patch or {}).get("patch_id"),
-            run.artifacts.get("requested_patch_id"),
-            *(item.get("patch_id") for item in run.test_fix_iterations if isinstance(item, dict)),
-        ]
+        if isinstance(run, ControlledWorkflowState):
+            candidates = [item.patch_id for item in run.patches]
+        else:
+            candidates = [
+                (run.patch or {}).get("patch_id"),
+                run.artifacts.get("requested_patch_id"),
+                *(item.get("patch_id") for item in run.test_fix_iterations if isinstance(item, dict)),
+            ]
         for candidate in candidates:
             if isinstance(candidate, str) and candidate and candidate not in patch_ids:
                 patch_ids.append(candidate)

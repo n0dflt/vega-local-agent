@@ -211,8 +211,10 @@ class CheckpointStore:
         return self.list_for_workflow(workflow_id, include_history=True)
 
     def create(self, run: WorkflowRun, reason: CheckpointReason | str) -> WorkflowCheckpoint:
-        if not isinstance(run, WorkflowRun):
-            raise CheckpointStorageError("run must be a WorkflowRun.")
+        from workflows.controlled_models import ControlledWorkflowState
+
+        if not isinstance(run, (WorkflowRun, ControlledWorkflowState)):
+            raise CheckpointStorageError("run must be a supported workflow state")
         try:
             normalized_reason = CheckpointReason(reason)
         except (TypeError, ValueError) as exc:

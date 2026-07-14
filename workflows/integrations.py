@@ -36,6 +36,25 @@ class PatchToolsAdapter:
             "diff": data.get("diff"),
         }
 
+    def prepare_safe(self, patch_id: str) -> dict:
+        """Return only the fixed metadata needed for confirmation binding."""
+        from tools.patch_tools import show_patch
+
+        result = show_patch(patch_id)
+        data = result.get("data")
+        required = {
+            "patch_id", "status", "target_path", "original_sha256", "proposed_sha256"
+        }
+        if (
+            not result.get("ok")
+            or not isinstance(data, dict)
+            or not required.issubset(data)
+            or data.get("patch_id") != patch_id
+            or data.get("status") not in {"pending", "applied", "rolled_back"}
+        ):
+            raise WorkflowError("managed_patch_invalid")
+        return {key: data[key] for key in required}
+
     def apply(self, patch_id, confirmed: bool = False) -> dict:
         if not patch_id:
             raise WorkflowError(
@@ -68,9 +87,24 @@ class PatchToolsAdapter:
             )
         return result["data"]
 
+    def rollback(self, patch_id, confirmed: bool = False) -> dict:
+        from tools.patch_tools import rollback_patch
+
+        result = rollback_patch(patch_id, confirmed=confirmed)
+        data = result.get("data")
+        if not result.get("ok") or not isinstance(data, dict) or data.get("status") != "rolled_back":
+            raise WorkflowError("rollback_refused")
+        return {
+            "patch_id": data.get("patch_id"),
+            "target_path": data.get("target_path"),
+            "status": data.get("status"),
+        }
+
 
 class TestToolsAdapter:
     """Run one controlled test group for the current workflow iteration."""
+
+    __test__ = False
 
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root
@@ -98,6 +132,42 @@ class TestToolsAdapter:
             "data": result.get("data"),
             "runs": 1,
             "group": "all",
+        }
+
+    def resolve(self, group_id: str) -> dict:
+        from tools.test_tools import list_test_groups
+
+        result = list_test_groups(self.project_root)
+        if not result.get("ok") or not isinstance(result.get("data"), list):
+            raise WorkflowError("test_configuration_missing")
+        match = next((item for item in result["data"] if item.get("id") == group_id), None)
+        if not match or not match.get("available") or not match.get("enabled"):
+            raise WorkflowError("test_configuration_missing")
+        return {"group_id": match["id"], "command_id": match["command_id"]}
+
+    def run_group(self, group_id: str) -> dict:
+        from tools.test_tools import run_test_group
+
+        result = run_test_group(group_id, self.project_root)
+        data = result.get("data")
+        if not isinstance(data, dict):
+            return {
+                "passed": False,
+                "returncode": None,
+                "timed_out": False,
+                "duration_ms": 0,
+                "outcome_code": "not_started",
+            }
+        passed = result.get("ok") is True and data.get("returncode") == 0
+        timed_out = data.get("timed_out") is True
+        return {
+            "passed": passed,
+            "returncode": data.get("returncode") if type(data.get("returncode")) is int else None,
+            "timed_out": timed_out,
+            "duration_ms": min(data.get("duration_ms", 0), 3_600_000)
+            if type(data.get("duration_ms")) is int
+            else 0,
+            "outcome_code": "passed" if passed else "timed_out" if timed_out else "failed",
         }
 
 

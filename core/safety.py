@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 DEFAULT_MAX_CHARS = 12_000
 BLOCKED_DIRECTORIES = frozenset({
     ".git", "__pycache__", ".pytest_cache", ".venv", "venv", "node_modules",
+    "data", "logs", "cache", "caches",
 })
 SENSITIVE_MARKERS = ("secret", "token", "password", "credential", "private")
 SENSITIVE_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx"})
@@ -36,13 +37,28 @@ def is_sensitive_file(path: Path) -> bool:
     )
 
 
+def _portable_relative_path(path: str) -> Path:
+    """Parse untrusted paths with both POSIX and Windows absolute-path rules."""
+    if not isinstance(path, str) or not path.strip() or "\x00" in path:
+        raise FileSafetyError("Path must be a non-empty relative path.")
+    value = path.strip()
+    windows = PureWindowsPath(value)
+    posix = PurePosixPath(value.replace("\\", "/"))
+    if windows.is_absolute() or windows.drive or posix.is_absolute():
+        raise FileSafetyError("Absolute paths are not allowed.")
+    parts = tuple(part for part in posix.parts if part not in {"", "."})
+    if not parts and value in {".", "./", ".\\"}:
+        return Path(".")
+    if not parts or ".." in parts:
+        raise FileSafetyError("Parent-directory traversal is not allowed.")
+    if any(":" in part for part in parts):
+        raise FileSafetyError("Windows stream and drive paths are not allowed.")
+    return Path(*parts)
+
+
 def safe_path(path: str = ".", *, must_exist: bool = True) -> Path:
     """Resolve a relative project path and reject escapes/service directories."""
-    if not isinstance(path, str) or not path.strip():
-        raise FileSafetyError("Path must be a non-empty relative path.")
-    candidate_input = Path(path)
-    if candidate_input.is_absolute():
-        raise FileSafetyError("Absolute paths are not allowed.")
+    candidate_input = _portable_relative_path(path)
 
     root = get_project_root().resolve()
     candidate = (root / candidate_input).resolve(strict=False)
@@ -69,11 +85,7 @@ def validate_readable_file(path: str) -> Path:
 
 def _reject_symlink_components(path: str) -> None:
     """Reject traversal and symbolic links in every lexical path component."""
-    candidate_input = Path(path)
-
-    for part in candidate_input.parts:
-        if part == "..":
-            raise FileSafetyError("Parent-directory traversal is not allowed.")
+    candidate_input = _portable_relative_path(path)
 
     current = get_project_root().resolve()
 
@@ -88,12 +100,7 @@ def _reject_symlink_components(path: str) -> None:
 
 def validate_writable_text_file(path: str) -> Path:
     """Validate an existing UTF-8 text file before a controlled write."""
-    if not isinstance(path, str) or not path.strip():
-        raise FileSafetyError("Path must be a non-empty relative path.")
-
-    candidate_input = Path(path)
-    if candidate_input.is_absolute():
-        raise FileSafetyError("Absolute paths are not allowed.")
+    _portable_relative_path(path)
 
     _reject_symlink_components(path)
 

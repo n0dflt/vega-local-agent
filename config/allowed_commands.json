@@ -29,8 +29,11 @@
         "planner",
         "memory",
         "rag",
+        "review",
         "scripts",
-        "tests"
+        "tests",
+        "ui",
+        "web_demo"
       ],
       "timeout_seconds": 120,
       "enabled": true
@@ -64,6 +67,25 @@
         "--tb=short",
         "tests/test_terminal_tools.py",
         "tests/test_terminal_commands.py"
+      ],
+      "timeout_seconds": 180,
+      "enabled": true
+    },
+    {
+      "id": "tests-workflow",
+      "description": "Run the focused controlled-workflow safety suite.",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-rs",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "tests/test_controlled_workflows.py",
+        "tests/test_controlled_workflow_security.py",
+        "tests/test_workflow_commands.py"
       ],
       "timeout_seconds": 180,
       "enabled": true

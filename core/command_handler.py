@@ -130,17 +130,22 @@ It cannot commit, tag, push, or publish a GitHub release."""
 
 WORKFLOW_HELP = """Coding Workflow commands:
   /workflow list
+  /workflow types
+  /workflow start bug-fix <task>
+  /workflow start test <allowlisted-group>
+  /workflow start review <unstaged|staged>
   /workflow start feature <task>
-  /workflow start bugfix <task>
   /workflow start refactor <task>
-  /workflow attach-patch <pending_patch_id>
-  /workflow link-task <task_id>
-  /workflow status
-  /workflow review
-  /workflow resume
-  /workflow confirm
-  /workflow cancel
+  /workflow attach-patch <pending_patch_id> [test-group]
+  /workflow approve patch <workflow_id>
+  /workflow approve tests <workflow_id>
+  /workflow status [workflow_id]
+  /workflow show <workflow_id>
+  /workflow resume [workflow_id]
+  /workflow cancel [workflow_id]
+  /workflow rollback <workflow_id>
   /workflow history
+  /workflow review
   /workflow recovery-status [workflow_id]
   /workflow checkpoints [workflow_id]
   /workflow recover <checkpoint_id> CONFIRM"""
@@ -161,7 +166,7 @@ def handle_permissions_command(command: str, session_grants: SessionGrantStore) 
     parts = [_clean_cli_token(part) for part in parts]
     if len(parts) == 1:
         return PERMISSIONS_HELP
-    action = parts[1].lower()
+    action = parts[1]
     if action == "grants" and len(parts) == 2:
         grants = session_grants.list_grants()
         if not grants:
@@ -213,7 +218,7 @@ def handle_workflow_command(
     if len(parts) == 1:
         return WORKFLOW_HELP
     parts = [_clean_cli_token(part) for part in parts]
-    action = parts[1].lower()
+    action = parts[1]
 
     if action in {"recovery-status", "checkpoints", "recover"}:
         root = Path(project_root) if project_root is not None else Path.cwd()
@@ -269,15 +274,25 @@ def handle_workflow_command(
             ),
         )
     try:
-        if action == "list" and len(parts) == 2:
+        if action == "types" and len(parts) == 2:
             return "Available workflows:\n" + "\n".join(f"  {name}" for name in engine.list_workflows())
+        if action == "list" and len(parts) == 2:
+            active = engine.status()
+            history = engine.history()
+            records = ([] if active is None else [active]) + history
+            if not records:
+                return "Workflow list is empty.\nAvailable workflows: " + ", ".join(engine.list_workflows())
+            return "Workflow list:\n" + "\n".join(
+                f"  {run.workflow_id} {run.workflow_type} {run.status.value}"
+                for run in records
+            ) + "\nAvailable workflows: " + ", ".join(engine.list_workflows())
         if action == "start":
             if len(parts) < 4:
-                return "Usage: /workflow start <feature|bugfix|refactor> [--patch <pending_patch_id>] <task>"
-            workflow_type = parts[2].lower()
+                return "Usage: /workflow start <bug-fix|test|review|feature|refactor> <task-or-scope>"
+            workflow_type = parts[2]
             patch_id = None
             task_start = 3
-            if parts[3].lower() == "--patch":
+            if parts[3] == "--patch":
                 if len(parts) < 6:
                     return "Usage: /workflow start <type> --patch <pending_patch_id> <task>"
                 patch_id = parts[4].strip().strip('"')
@@ -285,33 +300,81 @@ def handle_workflow_command(
             task = " ".join(parts[task_start:]).strip().strip('"')
             run = engine.start(workflow_type, task, patch_id=patch_id)
             return _workflow_text(run)
-        if action == "attach-patch" and len(parts) == 3:
-            return _workflow_text(engine.attach_patch(parts[2].strip().strip('"')))
-        if action == "link-task" and len(parts) == 3:
-            return _workflow_text(engine.link_task(parts[2].strip().strip('"')))
-        if action == "status" and len(parts) == 2:
-            run = engine.status()
+        if action == "attach-patch" and len(parts) in {3, 4}:
+            group = parts[3] if len(parts) == 4 else "workflow"
+            return _workflow_text(
+                engine.attach_patch(parts[2].strip().strip('"'), test_group=group)
+            )
+        if action == "approve" and len(parts) == 4:
+            if parts[2] == "patch":
+                return _workflow_text(engine.approve_patch(parts[3]))
+            if parts[2] == "tests":
+                return _workflow_text(engine.approve_tests(parts[3]))
+            return WORKFLOW_HELP
+        if action == "status" and len(parts) in {2, 3}:
+            run = engine.status(parts[2] if len(parts) == 3 else None)
             return "No active workflow." if run is None else _workflow_text(run)
-        if action == "review" and len(parts) == 2:
-            run = engine.status()
-            if run is None or not run.review_results:
-                return "No review result is available."
-            from review.models import ReviewReport
-            from review.report_builder import build_review_report
-            return build_review_report(ReviewReport.from_dict(run.review_results[-1]))
-        if action == "resume" and len(parts) == 2:
-            return _workflow_text(engine.resume())
+        if action == "show" and len(parts) == 3:
+            return _workflow_text(engine.show(parts[2]))
+        if action == "resume" and len(parts) in {2, 3}:
+            return _workflow_text(
+                engine.resume(parts[2]) if len(parts) == 3 else engine.resume()
+            )
         if action == "confirm" and len(parts) == 2:
             return _workflow_text(engine.confirm())
-        if action == "cancel" and len(parts) == 2:
-            return _workflow_text(engine.cancel())
+        if action == "cancel" and len(parts) in {2, 3}:
+            return _workflow_text(
+                engine.cancel(parts[2]) if len(parts) == 3 else engine.cancel()
+            )
+        if action == "rollback" and len(parts) == 3:
+            return _workflow_text(engine.rollback(parts[2]))
         if action == "history" and len(parts) == 2:
             history = engine.history()
             if not history:
                 return "Workflow history is empty."
             return "Workflow history:\n" + "\n".join(
-                f"  {run.workflow_id} {run.workflow_type} {run.status.value} - {run.task}"
+                f"  {run.workflow_id} {run.workflow_type} {run.status.value}"
                 for run in history
+            )
+        if action == "review" and len(parts) == 2:
+            candidates = []
+            current = engine.status()
+            if current is not None:
+                candidates.append(current)
+            if hasattr(engine, "history"):
+                candidates.extend(engine.history())
+            reports = next(
+                (run.review_results for run in candidates if getattr(run, "review_results", [])),
+                [],
+            )
+            if not reports:
+                return "No review result is available."
+            report = reports[-1]
+            findings = report.get("findings", []) if isinstance(report, dict) else []
+            if "passed" in report:
+                passed = report.get("passed") is True
+                severity = report.get("highest_severity", "info")
+                files = report.get("reviewed_files", [])
+            else:
+                blockers = [
+                    item for item in findings
+                    if isinstance(item, dict) and item.get("severity") in {"critical", "high"}
+                ]
+                passed = not blockers
+                severity_order = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                severity = max(
+                    (item.get("severity", "info") for item in findings if isinstance(item, dict)),
+                    key=lambda value: severity_order.get(value, 0),
+                    default="info",
+                )
+                files = report.get("files", [])
+            return "\n".join(
+                (
+                    f"Review status: {'passed' if passed else 'blocked'}",
+                    f"Highest severity: {severity}",
+                    f"Reviewed files: {len(files) if isinstance(files, list) else 0}",
+                    f"Findings: {len(findings) if isinstance(findings, list) else 0}",
+                )
             )
     except (WorkflowError, TypeError, ValueError) as exc:
         return f"Workflow error: {exc}"
@@ -383,26 +446,41 @@ def _recovery_result_text(result) -> str:
 
 
 def _workflow_text(run) -> str:
-    last_verification=(run.verification_results[-1].get("ok") if run.verification_results else None)
-    last_review=(run.review_results[-1] if run.review_results else None)
+    if not hasattr(run, "test_results"):
+        return "\n".join(
+            [
+                f"Workflow: {run.workflow_type}",
+                f"ID: {run.workflow_id}",
+                f"Stage: {run.status.value}",
+            ]
+        )
+    last_verification = run.test_results[-1].passed if run.test_results else None
     lines = [
         f"Workflow: {run.workflow_type}",
         f"ID: {run.workflow_id}",
-        f"Task: {run.task}",
-        f"Status: {run.status.value}",
-        f"Patch iterations: {len(run.test_fix_iterations)}/{run.max_fix_attempts}",
+        f"Stage: {run.status.value}",
+        f"Revision: {run.revision}",
+        f"Patch iterations: {run.iteration_count}/{run.max_iterations}",
         f"Last verification: {('passed' if last_verification is True else 'failed' if last_verification is False else 'none')}",
-        f"Last review: {('passed' if last_review and last_review.get('passed') else 'blocking' if last_review else 'none')}",
-        f"Blocking findings: {len((last_review or {}).get('blocking_findings') or [])}",
-        f"Patch request reason: {run.patch_request_reason}",
+        f"Confirmation required: {('none' if run.confirmation is None else run.confirmation.action)}",
+        f"Test group: {run.test_group or 'none'}",
+        f"Workspace drift: {str(run.workspace_drift).lower()}",
+        f"Rollback available: {str(run.rollback_available).lower()}",
+        f"Next actions: {', '.join(run.next_actions) or 'none'}",
     ]
-    if run.status.value == "waiting_confirmation":
-        lines.append("Explicit confirmation required: /workflow confirm or /workflow cancel")
     if run.status.value == "waiting_patch":
         lines.append("Attach a pending Patch Tools artifact: /workflow attach-patch <pending_patch_id>")
-        lines.append("Next action: /workflow attach-patch <pending_patch_id>")
-    if run.error:
-        lines.append(f"Error: {run.error}")
+    if run.review is not None:
+        lines.extend(
+            [
+                f"Review scope: {run.review.scope}",
+                f"Review files: {len(run.review.files)}",
+                f"Review findings: {len(run.review.findings)}",
+                f"Review evidence digest: {run.review.diff_sha256}",
+            ]
+        )
+    if run.error_codes:
+        lines.append(f"Safe error codes: {', '.join(run.error_codes)}")
     return "\n".join(lines)
 
 

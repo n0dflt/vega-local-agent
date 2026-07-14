@@ -20,6 +20,13 @@ class WorkflowStateError(WorkflowError):
 
 
 class WorkflowStatus(str, Enum):
+    PLANNED = "planned"
+    INVESTIGATING = "investigating"
+    AWAITING_PATCH_CONFIRMATION = "awaiting_patch_confirmation"
+    PATCH_APPLIED = "patch_applied"
+    AWAITING_TEST_CONFIRMATION = "awaiting_test_confirmation"
+    TESTS_RUNNING = "tests_running"
+    ROLLED_BACK = "rolled_back"
     CREATED = "created"
     ANALYZING = "analyzing"
     PLANNING = "planning"
@@ -41,8 +48,15 @@ class StepStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-TERMINAL_STATUSES=frozenset({WorkflowStatus.COMPLETED,WorkflowStatus.FAILED,WorkflowStatus.CANCELLED})
+TERMINAL_STATUSES=frozenset({WorkflowStatus.COMPLETED,WorkflowStatus.FAILED,WorkflowStatus.CANCELLED,WorkflowStatus.ROLLED_BACK})
 ALLOWED_TRANSITIONS={
+ WorkflowStatus.PLANNED:frozenset({WorkflowStatus.INVESTIGATING,WorkflowStatus.AWAITING_TEST_CONFIRMATION,WorkflowStatus.COMPLETED,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
+ WorkflowStatus.INVESTIGATING:frozenset({WorkflowStatus.WAITING_PATCH,WorkflowStatus.COMPLETED,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
+ WorkflowStatus.AWAITING_PATCH_CONFIRMATION:frozenset({WorkflowStatus.PATCH_APPLIED,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
+ WorkflowStatus.PATCH_APPLIED:frozenset({WorkflowStatus.AWAITING_TEST_CONFIRMATION,WorkflowStatus.ROLLED_BACK,WorkflowStatus.FAILED}),
+ WorkflowStatus.AWAITING_TEST_CONFIRMATION:frozenset({WorkflowStatus.TESTS_RUNNING,WorkflowStatus.CANCELLED,WorkflowStatus.ROLLED_BACK,WorkflowStatus.FAILED}),
+ WorkflowStatus.TESTS_RUNNING:frozenset({WorkflowStatus.WAITING_PATCH,WorkflowStatus.COMPLETED,WorkflowStatus.FAILED}),
+ WorkflowStatus.ROLLED_BACK:frozenset(),
  WorkflowStatus.CREATED:frozenset({WorkflowStatus.ANALYZING,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
  WorkflowStatus.ANALYZING:frozenset({WorkflowStatus.PLANNING,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),
  WorkflowStatus.PLANNING:frozenset({WorkflowStatus.WAITING_PATCH,WorkflowStatus.CANCELLED,WorkflowStatus.FAILED}),

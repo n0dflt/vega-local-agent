@@ -99,6 +99,8 @@ _ERROR_CODES = frozenset(
         "trace_store_unavailable",
         "trace_record_invalid",
         "trace_scan_limit_reached",
+        "workflow_state_invalid",
+        "workflow_scan_limit_reached",
     }
     | STATE_ERROR_CODES
 )
@@ -661,6 +663,88 @@ class RuntimeFilesDiagnostics:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkflowDiagnostics:
+    """Payload-free snapshot of the controlled workflow state machine."""
+
+    status: str
+    available: bool
+    active_count: int
+    history_count: int
+    workflow_id: str = ""
+    workflow_type: str = ""
+    stage: str = ""
+    next_actions: tuple[str, ...] = ()
+    confirmation_required: bool = False
+    iteration_count: int = 0
+    rollback_available: bool = False
+    workspace_drift: bool = False
+    workflow_error_codes: tuple[str, ...] = ()
+    error_codes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "status", _status(self.status))
+        if any(
+            type(value) is not bool
+            for value in (
+                self.available, self.confirmation_required,
+                self.rollback_available, self.workspace_drift,
+            )
+        ):
+            raise DiagnosticsError("workflow diagnostic flags must be booleans")
+        _count(self.active_count, "active_count")
+        _count(self.history_count, "history_count")
+        if type(self.iteration_count) is not int or not 0 <= self.iteration_count <= 3:
+            raise DiagnosticsError("workflow iteration count is outside the limit")
+        from workflows.controlled_models import NEXT_ACTIONS, SAFE_ERROR_CODES, WORKFLOW_TYPES
+        from workflows.models import WORKFLOW_ID_PATTERN, WorkflowStatus
+
+        workflow_id = _safe_identifier(self.workflow_id, "workflow_id", empty=True)
+        if workflow_id and not WORKFLOW_ID_PATTERN.fullmatch(workflow_id):
+            raise DiagnosticsError("workflow_id is invalid")
+        workflow_type = _safe_identifier(self.workflow_type, "workflow_type", empty=True)
+        if workflow_type and workflow_type not in WORKFLOW_TYPES:
+            raise DiagnosticsError("workflow_type is not allowlisted")
+        stage = _safe_identifier(self.stage, "stage", empty=True)
+        if stage:
+            try:
+                WorkflowStatus(stage)
+            except ValueError as exc:
+                raise DiagnosticsError("workflow stage is not allowlisted") from exc
+        object.__setattr__(self, "workflow_id", workflow_id)
+        object.__setattr__(self, "workflow_type", workflow_type)
+        object.__setattr__(self, "stage", stage)
+        actions = tuple(_safe_identifier(value, "next_action") for value in self.next_actions)
+        if len(actions) > 8 or any(action not in NEXT_ACTIONS for action in actions):
+            raise DiagnosticsError("workflow next actions exceed the limit")
+        object.__setattr__(self, "next_actions", actions)
+        workflow_codes = tuple(
+            _safe_identifier(value, "workflow_error_code") for value in self.workflow_error_codes
+        )
+        if len(workflow_codes) > 8 or any(value not in SAFE_ERROR_CODES for value in workflow_codes):
+            raise DiagnosticsError("workflow error codes are not allowlisted")
+        object.__setattr__(self, "workflow_error_codes", workflow_codes)
+        object.__setattr__(self, "error_codes", _codes(self.error_codes))
+
+    def to_safe_dict(self) -> dict[str, object]:
+        return {
+            "status": self.status,
+            "available": self.available,
+            "active_count": self.active_count,
+            "history_count": self.history_count,
+            "workflow_id": self.workflow_id,
+            "workflow_type": self.workflow_type,
+            "stage": self.stage,
+            "next_actions": list(self.next_actions),
+            "confirmation_required": self.confirmation_required,
+            "iteration_count": self.iteration_count,
+            "rollback_available": self.rollback_available,
+            "workspace_drift": self.workspace_drift,
+            "workflow_error_codes": list(self.workflow_error_codes),
+            "error_codes": list(self.error_codes),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeDiagnosticsReport:
     """Immutable allowlisted runtime report with no user or tool payload data."""
 
@@ -677,6 +761,7 @@ class RuntimeDiagnosticsReport:
     terminal_policy: CountedSubsystemDiagnostics
     execution_traces: TraceStoreDiagnostics
     local_state: StateIntegrityDiagnostics
+    controlled_workflows: WorkflowDiagnostics
     runtime_files: RuntimeFilesDiagnostics
 
     def __post_init__(self) -> None:
@@ -706,6 +791,7 @@ class RuntimeDiagnosticsReport:
             "terminal_policy": self.terminal_policy.to_safe_dict(),
             "execution_traces": self.execution_traces.to_safe_dict(),
             "local_state": self.local_state.to_safe_dict(),
+            "controlled_workflows": self.controlled_workflows.to_safe_dict(),
             "runtime_files": self.runtime_files.to_safe_dict(),
         }
 
@@ -908,6 +994,76 @@ def _build_terminal(project_root: Path) -> CountedSubsystemDiagnostics:
     )
 
 
+def _build_workflows(project_root: Path) -> WorkflowDiagnostics:
+    """Inspect bounded workflow JSON without creating files or taking actions."""
+    from workflows.controlled_models import CONTROLLED_SCHEMA_VERSION, ControlledWorkflowState
+    from workflows.controlled_store import MAX_WORKFLOW_FILES, MAX_WORKFLOW_STATE_BYTES, migrate_legacy_state
+
+    root = project_root / "data" / "workflows"
+    errors: list[str] = []
+    active_states: list[ControlledWorkflowState] = []
+    history_count = 0
+
+    def inspect(directory: Path, *, active: bool) -> None:
+        nonlocal history_count
+        if not directory.exists():
+            return
+        if directory.is_symlink() or not directory.is_dir():
+            errors.append("workflow_state_invalid")
+            return
+        paths = sorted(directory.glob("*.json"))
+        if len(paths) > MAX_WORKFLOW_FILES:
+            errors.append("workflow_scan_limit_reached")
+            paths = paths[:MAX_WORKFLOW_FILES]
+        for path in paths:
+            try:
+                if not re.fullmatch(r"workflow-[0-9a-f]{32}\.json", path.name):
+                    raise ValueError
+                if path.is_symlink() or path.stat().st_size > MAX_WORKFLOW_STATE_BYTES:
+                    raise ValueError
+                raw = path.read_bytes()
+                if len(raw) > MAX_WORKFLOW_STATE_BYTES:
+                    raise ValueError
+                data = json.loads(raw.decode("utf-8"))
+                if not isinstance(data, dict):
+                    raise ValueError
+                state = (
+                    ControlledWorkflowState.from_dict(data)
+                    if data.get("schema_version") == CONTROLLED_SCHEMA_VERSION
+                    else migrate_legacy_state(data)
+                )
+                if path.stem != state.workflow_id:
+                    raise ValueError
+                if active:
+                    active_states.append(state)
+                else:
+                    history_count += 1
+            except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+                errors.append("workflow_state_invalid")
+
+    inspect(root / "active", active=True)
+    inspect(root / "history", active=False)
+    if len(active_states) > 1:
+        errors.append("workflow_state_invalid")
+    state = active_states[0] if len(active_states) == 1 else None
+    return WorkflowDiagnostics(
+        status="degraded" if errors else "healthy",
+        available=root.exists(),
+        active_count=min(len(active_states), MAX_COUNT),
+        history_count=min(history_count, MAX_COUNT),
+        workflow_id=state.workflow_id if state else "",
+        workflow_type=state.workflow_type if state else "",
+        stage=state.status.value if state else "",
+        next_actions=state.next_actions if state else (),
+        confirmation_required=state.confirmation is not None if state else False,
+        iteration_count=state.iteration_count if state else 0,
+        rollback_available=state.rollback_available if state else False,
+        workspace_drift=state.workspace_drift if state else False,
+        workflow_error_codes=state.error_codes if state else (),
+        error_codes=tuple(dict.fromkeys(errors)),
+    )
+
+
 def build_runtime_diagnostics(
     project_root: Path,
     *,
@@ -968,6 +1124,13 @@ def build_runtime_diagnostics(
             error_codes=("state_lock_operation_failed",),
         )
         errors.append("diagnostics_build_failed")
+    try:
+        controlled_workflows = _build_workflows(root)
+    except Exception:
+        controlled_workflows = WorkflowDiagnostics(
+            "unavailable", False, 0, 0, error_codes=("workflow_state_invalid",)
+        )
+        errors.append("diagnostics_build_failed")
     runtime_files = RuntimeFilesDiagnostics(
         smoke_test_exists=(root / "scripts" / "smoke_test.py").is_file(),
         release_policy_exists=(root / "config" / "release_policy.json").is_file(),
@@ -979,7 +1142,7 @@ def build_runtime_diagnostics(
             errors.append("production_snapshot_blocked")
     elif errors or any(
         section.status != "healthy"
-        for section in (model, documents, memory, terminal, traces, local_state)
+        for section in (model, documents, memory, terminal, traces, local_state, controlled_workflows)
     ):
         overall = "degraded"
     else:
@@ -1002,6 +1165,7 @@ def build_runtime_diagnostics(
         terminal_policy=terminal,
         execution_traces=traces,
         local_state=local_state,
+        controlled_workflows=controlled_workflows,
         runtime_files=runtime_files,
     )
 
@@ -1134,6 +1298,9 @@ def format_diagnostics_summary(report: RuntimeDiagnosticsReport) -> str:
             f"Trace store: {trace.store_path}",
             f"Trace records scanned: {trace.valid_records}",
             f"Local state integrity: {report.local_state.status}",
+            f"Controlled workflows: {report.controlled_workflows.status} "
+            f"({report.controlled_workflows.active_count} active, "
+            f"{report.controlled_workflows.history_count} history)",
         )
     )
 
@@ -1188,6 +1355,7 @@ __all__ = [
     "TraceAggregateDiagnostics",
     "TraceLatestDiagnostics",
     "TraceStoreDiagnostics",
+    "WorkflowDiagnostics",
     "build_runtime_diagnostics",
     "export_diagnostics_report",
     "format_diagnostics_summary",

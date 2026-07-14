@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from workflows.checkpoint_models import CheckpointReason, WorkflowCheckpoint, canonical_payload_bytes
 from workflows.checkpoint_store import CheckpointStorageError, CheckpointStore
+from workflows.controlled_models import ControlledWorkflowState
 from workflows.models import WORKFLOW_ID_PATTERN, WorkflowRun, WorkflowStatus, validate_workflow_id
 from workflows.recovery_models import RecoveryDiagnosis, RecoveryResult, RecoveryState
 
@@ -29,7 +30,21 @@ _SAFE = frozenset({
     (CheckpointReason.AFTER_PATCH_APPLY, WorkflowStatus.VERIFYING),
     (CheckpointReason.VERIFICATION_RECORDED, WorkflowStatus.VERIFYING),
     (CheckpointReason.REVIEW_RECORDED, WorkflowStatus.REVIEWING),
+    (CheckpointReason.WORKFLOW_STARTED, WorkflowStatus.PLANNED),
+    (CheckpointReason.STATE_TRANSITION, WorkflowStatus.INVESTIGATING),
+    (CheckpointReason.STATE_TRANSITION, WorkflowStatus.AWAITING_PATCH_CONFIRMATION),
+    (CheckpointReason.BEFORE_PATCH_APPLY, WorkflowStatus.AWAITING_PATCH_CONFIRMATION),
+    (CheckpointReason.AFTER_PATCH_APPLY, WorkflowStatus.AWAITING_TEST_CONFIRMATION),
+    (CheckpointReason.STATE_TRANSITION, WorkflowStatus.AWAITING_TEST_CONFIRMATION),
+    (CheckpointReason.STATE_TRANSITION, WorkflowStatus.TESTS_RUNNING),
+    (CheckpointReason.VERIFICATION_RECORDED, WorkflowStatus.WAITING_PATCH),
 })
+
+
+def _deserialize_state(data: dict) -> WorkflowRun | ControlledWorkflowState:
+    if data.get("schema_version") == 2:
+        return ControlledWorkflowState.from_dict(data)
+    return WorkflowRun.from_dict(data)
 
 
 class WorkflowRecoveryManager:
@@ -47,7 +62,7 @@ class WorkflowRecoveryManager:
 
     @staticmethod
     def _warnings(checkpoint: WorkflowCheckpoint) -> list[str]:
-        if checkpoint.workflow_status is WorkflowStatus.EXECUTING:
+        if checkpoint.workflow_status in {WorkflowStatus.EXECUTING, WorkflowStatus.TESTS_RUNNING}:
             return ["Patch application state must be verified by WorkflowEngine.resume()."]
         return []
 
@@ -58,9 +73,9 @@ class WorkflowRecoveryManager:
             raise RecoveryStorageError("Active workflow storage cannot be inspected.") from exc
 
     @staticmethod
-    def _load_run(path: Path) -> WorkflowRun:
+    def _load_run(path: Path) -> WorkflowRun | ControlledWorkflowState:
         data = json.loads(path.read_text(encoding="utf-8"))
-        run = WorkflowRun.from_dict(data)
+        run = _deserialize_state(data)
         if run.to_dict() != data or path.stem != run.workflow_id:
             raise ValueError("Active workflow filename or payload is invalid.")
         return run
@@ -192,7 +207,7 @@ class WorkflowRecoveryManager:
             if (checkpoint.reason, checkpoint.workflow_status) not in _SAFE:
                 raise RecoveryNotAvailableError("Checkpoint is not safe for recovery.")
             try:
-                run = WorkflowRun.from_dict(checkpoint.workflow_payload)
+                run = _deserialize_state(checkpoint.workflow_payload)
                 if run.to_dict() != checkpoint.workflow_payload:
                     raise ValueError
             except (TypeError, ValueError, KeyError) as exc:

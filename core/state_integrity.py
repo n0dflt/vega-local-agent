@@ -53,10 +53,12 @@ STATE_ERROR_CODES = frozenset(
 _LOCK_NAMES = {
     "trace": ".trace-state.lock",
     "reports": ".report-state.lock",
+    "workflows": ".workflow-state.lock",
 }
 _THREAD_LOCKS = {
     "trace": threading.Lock(),
     "reports": threading.Lock(),
+    "workflows": threading.Lock(),
 }
 _BLOCKED_PARTS = frozenset(
     {
@@ -97,6 +99,7 @@ _REPORT_FIELDS_V1 = frozenset(
     }
 )
 _REPORT_FIELDS_V2 = _REPORT_FIELDS_V1 | {"local_state"}
+_REPORT_FIELDS_V2_WORKFLOWS = _REPORT_FIELDS_V2 | {"controlled_workflows"}
 
 
 class StateIntegrityError(RuntimeError):
@@ -560,10 +563,14 @@ def _valid_report_content(content: bytes) -> bool:
         return False
     if not isinstance(value, dict) or type(value.get("schema_version")) is not int:
         return False
-    expected = _REPORT_FIELDS_V1 if value["schema_version"] == 1 else _REPORT_FIELDS_V2
+    expected = (
+        {_REPORT_FIELDS_V1}
+        if value["schema_version"] == 1
+        else {_REPORT_FIELDS_V2, _REPORT_FIELDS_V2_WORKFLOWS}
+    )
     return (
         value["schema_version"] in {1, 2}
-        and set(value) == expected
+        and set(value) in expected
         and value.get("report_type") == "runtime_diagnostics"
         and isinstance(value.get("version"), str)
         and isinstance(value.get("created_at"), str)

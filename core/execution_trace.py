@@ -50,6 +50,38 @@ _TRACE_FIELDS = frozenset(
         "error_codes",
     }
 )
+_TRACE_FIELDS_WITH_WORKFLOW = _TRACE_FIELDS | {"workflow_decision"}
+_WORKFLOW_DECISION_FIELDS = frozenset(
+    {
+        "workflow_id", "workflow_type", "stage", "action", "outcome",
+        "iteration_count", "confirmation_required", "workspace_drift",
+        "rollback_available", "error_codes",
+    }
+)
+_WORKFLOW_TYPES = frozenset({"bug-fix", "feature", "refactor", "review", "test"})
+_WORKFLOW_ID = re.compile(r"^workflow-[0-9a-f]{32}$")
+_WORKFLOW_STAGES = frozenset(
+    {
+        "planned", "investigating", "waiting_patch", "awaiting_patch_confirmation",
+        "patch_applied", "awaiting_test_confirmation", "tests_running", "completed",
+        "failed", "cancelled", "rolled_back",
+    }
+)
+_WORKFLOW_OUTCOMES = frozenset(
+    {"awaiting_confirmation", "cancelled", "completed", "failed", "in_progress", "rolled_back"}
+)
+_WORKFLOW_ACTIONS = frozenset(
+    {"patch_application", "patch_rollback", "state_transition", "test_execution"}
+)
+_WORKFLOW_ERROR_CODES = frozenset(
+    {
+        "confirmation_binding_invalid", "confirmation_replayed", "iteration_limit_reached",
+        "lock_timeout", "managed_patch_invalid", "patch_apply_failed", "patch_identity_changed",
+        "permission_policy_error", "review_failed", "rollback_refused", "state_incompatible",
+        "state_invalid", "state_write_failed", "test_configuration_missing",
+        "test_execution_failed", "workspace_drift",
+    }
+)
 _STEP_FIELDS = frozenset(
     {"step_id", "tool_name", "permission", "risk", "status", "error_code"}
 )
@@ -292,6 +324,72 @@ class TraceStep:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkflowTraceDecision:
+    workflow_id: str
+    workflow_type: str
+    stage: str
+    action: str
+    outcome: str
+    iteration_count: int
+    confirmation_required: bool
+    workspace_drift: bool
+    rollback_available: bool
+    error_codes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        workflow_id = _identifier(self.workflow_id, "workflow_id", allow_empty=False)
+        if not _WORKFLOW_ID.fullmatch(workflow_id):
+            raise TraceError("workflow_id is invalid")
+        object.__setattr__(self, "workflow_id", workflow_id)
+        for name, allowed in (
+            ("workflow_type", _WORKFLOW_TYPES),
+            ("action", _WORKFLOW_ACTIONS),
+            ("outcome", _WORKFLOW_OUTCOMES),
+        ):
+            value = _identifier(getattr(self, name), name, allow_empty=False)
+            if value not in allowed:
+                raise TraceError(f"{name} is not allowlisted")
+            object.__setattr__(self, name, value)
+        stage = _identifier(self.stage, "stage", allow_empty=False)
+        if stage not in _WORKFLOW_STAGES:
+            raise TraceError("workflow stage is not allowlisted")
+        object.__setattr__(self, "stage", stage)
+        if type(self.iteration_count) is not int or not 0 <= self.iteration_count <= 3:
+            raise TraceError("iteration_count is outside the workflow limit")
+        if any(
+            type(value) is not bool
+            for value in (self.confirmation_required, self.workspace_drift, self.rollback_available)
+        ):
+            raise TraceError("workflow decision flags must be booleans")
+        codes = _identifiers(self.error_codes, "workflow_error_codes")
+        if any(code not in _WORKFLOW_ERROR_CODES for code in codes):
+            raise TraceError("workflow error code is not allowlisted")
+        object.__setattr__(self, "error_codes", codes)
+
+    def to_safe_dict(self) -> dict[str, object]:
+        return {
+            "workflow_id": self.workflow_id,
+            "workflow_type": self.workflow_type,
+            "stage": self.stage,
+            "action": self.action,
+            "outcome": self.outcome,
+            "iteration_count": self.iteration_count,
+            "confirmation_required": self.confirmation_required,
+            "workspace_drift": self.workspace_drift,
+            "rollback_available": self.rollback_available,
+            "error_codes": list(self.error_codes),
+        }
+
+    @classmethod
+    def from_safe_dict(cls, value: object) -> "WorkflowTraceDecision":
+        if not isinstance(value, dict) or set(value) != _WORKFLOW_DECISION_FIELDS:
+            raise TraceError("workflow decision contains invalid fields")
+        if not isinstance(value["error_codes"], list):
+            raise TraceError("workflow decision error_codes must be an array")
+        return cls(**{**value, "error_codes": tuple(value["error_codes"])})
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionTrace:
     trace_id: str
     request_type: str
@@ -309,6 +407,7 @@ class ExecutionTrace:
     steps: tuple[TraceStep, ...] = ()
     status: TraceStatus = TraceStatus.STARTED
     error_codes: tuple[str, ...] = ()
+    workflow_decision: WorkflowTraceDecision | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -380,9 +479,13 @@ class ExecutionTrace:
             raise TraceError("fallback_used must be a boolean")
         if not isinstance(self.status, TraceStatus):
             object.__setattr__(self, "status", TraceStatus(self.status))
+        if self.workflow_decision is not None and not isinstance(
+            self.workflow_decision, WorkflowTraceDecision
+        ):
+            raise TraceError("workflow_decision must be a WorkflowTraceDecision or None")
 
     def to_safe_dict(self) -> dict[str, object]:
-        return {
+        result = {
             "trace_id": self.trace_id,
             "request_type": self.request_type,
             "intent": self.intent,
@@ -400,10 +503,13 @@ class ExecutionTrace:
             "status": self.status.value,
             "error_codes": list(self.error_codes),
         }
+        if self.workflow_decision is not None:
+            result["workflow_decision"] = self.workflow_decision.to_safe_dict()
+        return result
 
     @classmethod
     def from_safe_dict(cls, value: object) -> "ExecutionTrace":
-        if not isinstance(value, dict) or set(value) != _TRACE_FIELDS:
+        if not isinstance(value, dict) or set(value) not in {_TRACE_FIELDS, _TRACE_FIELDS_WITH_WORKFLOW}:
             raise TraceError("trace contains invalid fields")
         for field_name in (
             "required_capabilities",
@@ -435,6 +541,11 @@ class ExecutionTrace:
             steps=tuple(TraceStep.from_safe_dict(step) for step in raw_steps),
             status=status,
             error_codes=tuple(value["error_codes"]),
+            workflow_decision=(
+                WorkflowTraceDecision.from_safe_dict(value["workflow_decision"])
+                if "workflow_decision" in value
+                else None
+            ),
         )
 
 
@@ -836,6 +947,7 @@ __all__ = [
     "TraceError",
     "TraceLifecycleError",
     "TraceRecorder",
+    "WorkflowTraceDecision",
     "TraceSerializationError",
     "TraceStatus",
     "TraceScanResult",
