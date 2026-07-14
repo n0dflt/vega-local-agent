@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -215,6 +216,15 @@ def run_allowed_command(command_id: str, project_root: Path | str | None = None)
         if executable not in ALLOWED_EXECUTABLES or Path(argv[0]).name.lower() != executable:
             raise TerminalPolicyError("Terminal executable is not allowed.")
 
+        # Python commands remain allowlisted by their configured argv.  At
+        # execution time they use the interpreter that is already running
+        # VEGA, so a launcher-selected runtime does not depend on PATH.
+        effective_argv = (
+            (sys.executable, *argv[1:])
+            if executable in {"python", "python.exe"}
+            else argv
+        )
+
         environment = os.environ.copy()
         for variable in ("PYTHONSTARTUP", "PYTHONINSPECT", "PYTHONPATH", "PYTHONHOME"):
             environment.pop(variable, None)
@@ -224,7 +234,7 @@ def run_allowed_command(command_id: str, project_root: Path | str | None = None)
         timed_out = False
         try:
             completed = subprocess.run(
-                list(argv),
+                list(effective_argv),
                 cwd=root,
                 shell=False,
                 capture_output=True,
@@ -255,7 +265,7 @@ def run_allowed_command(command_id: str, project_root: Path | str | None = None)
         ok = returncode == 0 and not timed_out
         data = {
             "command_id": normalized,
-            "argv": argv,
+            "argv": effective_argv,
             "stdout": stdout,
             "stderr": stderr,
             "returncode": returncode,
@@ -267,7 +277,7 @@ def run_allowed_command(command_id: str, project_root: Path | str | None = None)
         data["warning"] = _write_audit(root, {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "command_id": normalized,
-            "argv": argv,
+            "argv": effective_argv,
             "returncode": returncode,
             "ok": ok,
             "timed_out": timed_out,
