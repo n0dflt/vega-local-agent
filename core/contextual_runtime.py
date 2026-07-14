@@ -32,7 +32,11 @@ from core.plan_executor import (
     PlanExecutionStatus,
     execute_plan,
 )
+from core.production_snapshot import ProductionSnapshot
 from core.tool_executor import ToolExecutor
+
+
+_BLOCKED_MESSAGE = "Contextual tool execution is blocked by production policy."
 
 
 class ContextualRuntimeStatus(str, Enum):
@@ -90,6 +94,7 @@ def try_execute_contextual_request(
         Mapping[str, Any] | str | Path | None
     ) = None,
     installed_models: Sequence[str] | None = None,
+    production_snapshot: ProductionSnapshot | None = None,
 ) -> ContextualRuntimeResult:
     """
     Attempt contextual execution before model fallback.
@@ -114,6 +119,22 @@ def try_execute_contextual_request(
             status=ContextualRuntimeStatus.NOT_HANDLED,
             reason="empty_input",
         )
+
+    if production_snapshot is not None:
+        if not isinstance(production_snapshot, ProductionSnapshot):
+            raise TypeError(
+                "production_snapshot must be a ProductionSnapshot instance"
+            )
+        if not production_snapshot.can_execute_tools:
+            return ContextualRuntimeResult(
+                status=ContextualRuntimeStatus.BLOCKED,
+                message=_BLOCKED_MESSAGE,
+                reason="production_snapshot_blocked",
+            )
+        registry = production_snapshot.tool_mapping
+        capability_config = production_snapshot.tool_capabilities
+        policy_config = production_snapshot.routing_policy
+        model_policy_config = production_snapshot.model_routing_policy
 
     root = Path(project_root).resolve()
 
@@ -140,6 +161,13 @@ def try_execute_contextual_request(
     if policy_config is None:
         policy_config = (
             root / "config" / "tool_routing_policy.json"
+        )
+
+    if policy_config is None:
+        return ContextualRuntimeResult(
+            status=ContextualRuntimeStatus.BLOCKED,
+            message=_BLOCKED_MESSAGE,
+            reason="production_snapshot_blocked",
         )
 
     try:
@@ -181,6 +209,12 @@ def try_execute_contextual_request(
         )
 
     try:
+        if model_policy_config is None:
+            return ContextualRuntimeResult(
+                status=ContextualRuntimeStatus.BLOCKED,
+                message=_BLOCKED_MESSAGE,
+                reason="production_snapshot_blocked",
+            )
         model_policy = load_model_routing_policy(model_policy_config)
         from core.model_router import (
             get_current_profile,

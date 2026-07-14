@@ -31,8 +31,10 @@ from core.orchestrator import (
     AgentOrchestrator,
     OrchestrationKind,
 )
+from core.production_runtime import build_production_runtime
+from core.production_snapshot import ProductionSnapshot
 from core.tool_executor import ToolExecutor
-from core.tool_executor_factory import build_production_session_grants, build_production_tool_executor
+from core.tool_executor_factory import build_production_tool_executor
 
 DEFAULT_MODEL = "vega-core"
 INTERNET = "OFF"
@@ -807,6 +809,7 @@ def handle_command(
     tool_executor: ToolExecutor | None = None,
     tool_confirmation_manager: ToolConfirmationManager | None = None,
     session_grants: SessionGrantStore | None = None,
+    production_snapshot: ProductionSnapshot | None = None,
 ) -> bool:
     command = command.strip()
     lower = command.lower()
@@ -935,6 +938,7 @@ def handle_command(
                 command,
                 root,
                 tool_executor=tool_executor,
+                production_snapshot=production_snapshot,
             )
         )
     elif lower == "/permissions" or lower.startswith("/permissions "):
@@ -1009,6 +1013,7 @@ def build_command_executor(
     tool_executor: ToolExecutor | None = None,
     tool_confirmation_manager: ToolConfirmationManager | None = None,
     session_grants: SessionGrantStore | None = None,
+    production_snapshot: ProductionSnapshot | None = None,
 ) -> CommandExecutor:
     """Create compatibility handlers for routed runtime commands."""
     if not isinstance(context, ExecutionContext):
@@ -1031,6 +1036,8 @@ def build_command_executor(
             arguments["tool_confirmation_manager"] = tool_confirmation_manager
         if session_grants is not None:
             arguments["session_grants"] = session_grants
+        if production_snapshot is not None:
+            arguments["production_snapshot"] = production_snapshot
         return handle_command(
             request.route.normalized_command,
             context.project_root,
@@ -1090,12 +1097,14 @@ def main() -> int:
     configure_output()
 
     root = project_root()
-    model = load_model_name(root)
-    system_prompt = load_system_prompt(root)
-    log_file = create_log(root, model)
 
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
+
+    production_runtime = build_production_runtime(root)
+    model = load_model_name(root)
+    system_prompt = load_system_prompt(root)
+    log_file = create_log(root, model)
 
     from core.agent_modes import (
         ModeRegistry,
@@ -1117,14 +1126,15 @@ def main() -> int:
         mode_session=mode_session,
     )
     context = orchestrator.context
-    session_grants = build_production_session_grants()
-    tool_executor = build_production_tool_executor(session_grants)
+    session_grants = production_runtime.session_grants
+    tool_executor = production_runtime.tool_executor
     tool_confirmation_manager = ToolConfirmationManager(input)
     command_executor = build_command_executor(
         context,
         tool_executor=tool_executor,
         tool_confirmation_manager=tool_confirmation_manager,
         session_grants=session_grants,
+        production_snapshot=production_runtime.snapshot,
     )
 
     from ui.startup_screen import (
@@ -1135,8 +1145,16 @@ def main() -> int:
         version=VERSION,
         model=context.model,
         internet_status=INTERNET,
-        status="Ready",
+        status=production_runtime.status,
         log_path=context.log_file,
+    )
+    print(
+        "Production policy: "
+        f"{production_runtime.snapshot.consistency_report.summary}"
+    )
+    print(
+        "Tool execution: "
+        f"{'ENABLED' if production_runtime.can_execute_tools else 'BLOCKED'}"
     )
 
     ready, details = check_ollama_ready(
@@ -1284,6 +1302,7 @@ def main() -> int:
                     context.project_root,
                     tool_executor,
                     chat_callable=call_ollama_chat,
+                    production_snapshot=production_runtime.snapshot,
                 )
             )
 

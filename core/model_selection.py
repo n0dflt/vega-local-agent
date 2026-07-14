@@ -72,10 +72,12 @@ _KNOWN_INTENTS = frozenset(
 
 
 def load_model_routing_policy(
-    source: Mapping[str, Any] | str | Path,
+    source: ModelRoutingPolicy | Mapping[str, Any] | str | Path,
 ) -> ModelRoutingPolicy:
     """Load and strictly validate a fail-closed model routing policy."""
 
+    if isinstance(source, ModelRoutingPolicy):
+        return source
     if isinstance(source, Mapping):
         data = dict(source)
     else:

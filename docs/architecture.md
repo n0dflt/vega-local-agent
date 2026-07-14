@@ -373,3 +373,14 @@ The Plugin API is **not a security sandbox**. Python import executes module-leve
 code, so this is a controlled API for explicitly trusted local modules. The
 allowlist and origin checks reduce accidental or ambiguous loading; they do not
 make untrusted Python safe.
+
+## v2.10 cross-layer reliability architecture
+
+The implementation contract for the v2.10 stabilization release is documented
+in [`docs/v2.10-architecture.md`](v2.10-architecture.md). The current branch
+implements only its runtime snapshot gate: one validated snapshot supplies the
+contextual catalog, permission policy, combined built-in/plugin mapping, and
+permission-enforced executor, with fail-closed bootstrap. Runtime-state
+ownership, redacted execution traces, the complete failure matrix, release
+identity, and later stages remain planned. Existing v2.0–v2.9 boundaries above
+remain authoritative unless that document explicitly narrows them.

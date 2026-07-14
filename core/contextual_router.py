@@ -229,10 +229,12 @@ def parse_tool_routing_policy(
 
 
 def load_tool_routing_policy(
-    source: Mapping[str, Any] | str | Path,
+    source: ToolRoutingPolicy | Mapping[str, Any] | str | Path,
 ) -> ToolRoutingPolicy:
     """Load routing policy from a mapping or JSON file."""
 
+    if isinstance(source, ToolRoutingPolicy):
+        return source
     if isinstance(source, Mapping):
         return parse_tool_routing_policy(source)
 
@@ -263,7 +265,7 @@ def route_contextual_request(
     text: str,
     registry: object,
     capability_config: Mapping[str, Any] | str | Path,
-    policy_config: Mapping[str, Any] | str | Path,
+    policy_config: ToolRoutingPolicy | Mapping[str, Any] | str | Path,
     *,
     workspace: str | Path = ".",
     preview: bool = False,

@@ -11,6 +11,8 @@ import core.production_snapshot as snapshot_module
 from core.contextual_router import ContextualRoutingError
 from core.policy_consistency import PolicyIssueCode, PolicyTool
 from core.production_snapshot import ProductionSnapshot, build_production_snapshot
+from core.production_runtime import build_production_runtime
+from core.tool_catalog import build_tool_catalog
 from permissions.models import PermissionPolicy
 from plugins.bootstrap import PluginBootstrapError, PluginBootstrapResult
 from plugins.models import (
@@ -25,7 +27,7 @@ from tools.registry import BUILTIN_TOOL_REGISTRY, TOOL_REGISTRY
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_snapshot_is_immutable_and_contains_no_execution_authority() -> None:
+def test_snapshot_is_immutable_and_hides_execution_authority_from_repr() -> None:
     snapshot = build_production_snapshot(ROOT)
 
     assert isinstance(snapshot, ProductionSnapshot)
@@ -35,6 +37,10 @@ def test_snapshot_is_immutable_and_contains_no_execution_authority() -> None:
     assert not any(callable(value) for value in snapshot.tools)
     with pytest.raises(FrozenInstanceError):
         snapshot.tools = ()
+    with pytest.raises(TypeError):
+        snapshot.tool_mapping["extra"] = lambda: None
+    with pytest.raises(TypeError):
+        snapshot.tool_capabilities["read_file"]["permission"] = "WRITE"
 
 
 def test_current_production_configuration_builds_without_fatal_issues() -> None:
@@ -48,6 +54,17 @@ def test_current_production_configuration_builds_without_fatal_issues() -> None:
     } == {"bug_fix", "test_run"}
     assert snapshot.effective_tool_names == tuple(sorted(BUILTIN_TOOL_REGISTRY))
     assert snapshot.plugin_activations == ()
+    assert set(snapshot.tool_mapping) == set(snapshot.effective_tool_names)
+
+
+def test_catalog_and_executor_use_snapshot_mapping() -> None:
+    runtime = build_production_runtime(ROOT)
+    snapshot = runtime.snapshot
+    catalog = build_tool_catalog(snapshot.tool_mapping, snapshot.tool_capabilities)
+
+    assert runtime.tool_executor.registered_tools() == tuple(sorted(snapshot.tool_mapping))
+    assert {tool.name for tool in catalog} == set(snapshot.tool_capabilities)
+    assert "not_in_snapshot" not in runtime.tool_executor.registered_tools()
 
 
 def test_build_does_not_mutate_either_registry_and_is_repeatable() -> None:
@@ -97,7 +114,7 @@ def _permission_policy_with_plugin_rule() -> PermissionPolicy:
 
 def _plugin_bootstrap(*, active: bool) -> PluginBootstrapResult:
     def handler():
-        raise AssertionError("snapshot construction must not execute plugin handlers")
+        return "plugin-result"
 
     tool = PluginTool(
         name="plugin_reader",
@@ -174,6 +191,23 @@ def test_allowed_plugin_uses_existing_bootstrap_result(monkeypatch) -> None:
     assert "plugin_reader" in snapshot.effective_tool_names
     assert snapshot.plugin_activations[0].active
     assert "handler" not in repr(snapshot.tools)
+
+
+def test_active_plugin_executes_through_shared_production_executor(monkeypatch) -> None:
+    _install_fake_plugin(monkeypatch, active=True)
+    snapshot = build_production_snapshot(ROOT)
+    monkeypatch.setattr(
+        "core.production_runtime.build_production_snapshot",
+        lambda project_root: snapshot,
+    )
+
+    runtime = build_production_runtime(ROOT)
+    result = runtime.tool_executor.execute_named("plugin_reader")
+
+    assert runtime.can_execute_tools
+    assert "plugin_reader" in runtime.tool_executor.registered_tools()
+    assert result.ok
+    assert result.data == "plugin-result"
 
 
 def test_inactive_plugin_is_excluded_from_effective_tools(monkeypatch) -> None:

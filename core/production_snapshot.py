@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
+from typing import Any
 
 from core.contextual_router import (
     ContextualRoutingError,
@@ -82,6 +85,17 @@ class ProductionSnapshot:
     model_policy: ModelPolicySnapshot | None
     plugin_activations: tuple[PluginToolActivation, ...]
     consistency_report: PolicyConsistencyReport
+    tool_mapping: Mapping[str, Callable[..., Any]] = field(
+        default_factory=dict,
+        repr=False,
+    )
+    tool_capabilities: Mapping[str, Mapping[str, Any]] = field(
+        default_factory=dict,
+        repr=False,
+    )
+    permission_policy: PermissionPolicy | None = field(default=None, repr=False)
+    routing_policy: ToolRoutingPolicy | None = field(default=None, repr=False)
+    model_routing_policy: ModelRoutingPolicy | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "domains", tuple(self.domains))
@@ -90,6 +104,20 @@ class ProductionSnapshot:
         object.__setattr__(self, "tools", tuple(self.tools))
         object.__setattr__(self, "permissions", tuple(self.permissions))
         object.__setattr__(self, "plugin_activations", tuple(self.plugin_activations))
+        object.__setattr__(
+            self,
+            "tool_mapping",
+            MappingProxyType(dict(self.tool_mapping)),
+        )
+        capabilities = {
+            name: MappingProxyType(dict(metadata))
+            for name, metadata in self.tool_capabilities.items()
+        }
+        object.__setattr__(
+            self,
+            "tool_capabilities",
+            MappingProxyType(capabilities),
+        )
 
     @property
     def can_execute_tools(self) -> bool:
@@ -176,6 +204,34 @@ def _normalized_tools(
     return tuple(sorted(values, key=lambda tool: (tool.name, tool.source)))
 
 
+def _immutable_model_policy(policy: ModelRoutingPolicy) -> ModelRoutingPolicy:
+    return ModelRoutingPolicy(
+        enabled=policy.enabled,
+        fallback_profile=policy.fallback_profile,
+        intent_profiles=MappingProxyType(dict(policy.intent_profiles)),
+        fallback_order=tuple(policy.fallback_order),
+        deep_request_chars=policy.deep_request_chars,
+        deep_signals=tuple(policy.deep_signals),
+        context_budgets=MappingProxyType(dict(policy.context_budgets)),
+        head_ratio=policy.head_ratio,
+    )
+
+
+def _immutable_capabilities(
+    capability_config: Mapping[str, Any],
+    effective_names: frozenset[str],
+) -> dict[str, Mapping[str, Any]]:
+    values: dict[str, Mapping[str, Any]] = {}
+    for name, metadata in capability_config.items():
+        if name not in effective_names:
+            continue
+        values[name] = {
+            key: tuple(value) if isinstance(value, list) else value
+            for key, value in metadata.items()
+        }
+    return values
+
+
 def _empty_snapshot(report: PolicyConsistencyReport) -> ProductionSnapshot:
     return ProductionSnapshot(
         domains=(),
@@ -187,6 +243,11 @@ def _empty_snapshot(report: PolicyConsistencyReport) -> ProductionSnapshot:
         model_policy=None,
         plugin_activations=(),
         consistency_report=report,
+        tool_mapping={},
+        tool_capabilities={},
+        permission_policy=None,
+        routing_policy=None,
+        model_routing_policy=None,
     )
 
 
@@ -285,6 +346,20 @@ def build_production_snapshot(project_root: Path) -> ProductionSnapshot:
     capabilities = tuple(
         sorted({capability for tool in effective_tools for capability in tool.capabilities})
     )
+    effective_names = frozenset(tool.name for tool in effective_tools)
+    tool_mapping = {
+        name: handler
+        for name, handler in bootstrap.combined_tool_mapping.items()
+        if name in effective_names
+    }
+    if set(tool_mapping) != set(effective_names):
+        return _empty_snapshot(
+            configuration_error_report(
+                layer="production_snapshot",
+                subject="effective_tool_mapping",
+                exception_type="ToolMappingMismatch",
+            )
+        )
 
     return ProductionSnapshot(
         domains=domains,
@@ -296,6 +371,17 @@ def build_production_snapshot(project_root: Path) -> ProductionSnapshot:
         model_policy=_model_snapshot(model_policy),
         plugin_activations=bootstrap.activations,
         consistency_report=report,
+        tool_mapping=tool_mapping if report.can_execute_tools else {},
+        tool_capabilities=(
+            _immutable_capabilities(capability_config, effective_names)
+            if report.can_execute_tools else {}
+        ),
+        permission_policy=permission_policy if report.can_execute_tools else None,
+        routing_policy=routing_policy if report.can_execute_tools else None,
+        model_routing_policy=(
+            _immutable_model_policy(model_policy)
+            if report.can_execute_tools else None
+        ),
     )
 
 

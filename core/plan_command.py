@@ -15,6 +15,7 @@ from core.plan_executor import (
     PlanExecutionResult,
     execute_plan,
 )
+from core.production_snapshot import ProductionSnapshot
 from core.tool_executor import ToolExecutor
 
 
@@ -127,6 +128,7 @@ def handle_plan_command(
         Mapping[str, Any] | str | Path | None
     ) = None,
     tool_executor: ToolExecutor | None = None,
+    production_snapshot: ProductionSnapshot | None = None,
 ) -> str:
     """Preview or explicitly execute a contextual plan."""
 
@@ -158,6 +160,17 @@ def handle_plan_command(
         if run_requested
         else payload
     )
+
+    if production_snapshot is not None:
+        if not isinstance(production_snapshot, ProductionSnapshot):
+            raise TypeError(
+                "production_snapshot must be a ProductionSnapshot instance"
+            )
+        if not production_snapshot.can_execute_tools:
+            return "Plan command error: production snapshot blocks tool execution"
+        registry = production_snapshot.tool_mapping
+        capability_config = production_snapshot.tool_capabilities
+        policy_config = production_snapshot.routing_policy
 
     if registry is None:
         from tools.registry import TOOL_REGISTRY

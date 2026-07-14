@@ -195,3 +195,41 @@ Known limitation:
   the Plugin API is not a sandbox and is limited to explicitly trusted code.
   Resolver cleanup is limited to modules and parent attributes published by the
   failing resolver call.
+
+## v2.9.0 implementation baseline
+
+Implemented in tag `v2.9.0`:
+
+* deterministic model profile selection and installed-model fallback;
+* intent-based automatic selection with manual profile preservation;
+* per-profile context budgets; and
+* bounded evidence synthesis with deterministic fallback.
+
+Release identity documentation still requires reconciliation before the next
+release and is part of the v2.10 plan.
+
+## v2.10.0 planned stabilization
+
+Status: `snapshot gate implemented; remaining stabilization planned`
+
+Implemented in `feature/v2.10-runtime-snapshot-gate`:
+
+* one immutable validated production snapshot for routing metadata, permission
+  policy, built-in/plugin tool mapping, contextual catalog, and executor;
+* fail-closed bootstrap that publishes no normal handlers after a fatal policy
+  issue or executor-construction failure; and
+* safe blocked execution plus focused integration and regression coverage.
+
+Remaining planned scope:
+
+* cross-layer validation of intents, domains, capabilities, tools, plugins,
+  permissions, model profiles, budgets, and policy schema versions;
+* Git-safe ownership of mutable runtime state;
+* bounded, redacted machine-decision execution traces;
+* deterministic model and synthesis failure paths;
+* end-to-end routing, failure, plugin, and release regression tests; and
+* synchronized v2.10 release identity and documentation.
+
+The executable design and acceptance criteria are in
+[`docs/v2.10-architecture.md`](v2.10-architecture.md). v2.10 does not add GUI,
+monitoring, autonomous tool execution, a marketplace, or automatic publishing.
