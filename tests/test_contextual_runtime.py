@@ -4,6 +4,7 @@ from core.contextual_runtime import (
     ContextualRuntimeStatus,
     try_execute_contextual_request,
 )
+from core.execution_progress import ExecutionProgressStage
 from core.execution_trace import (
     TraceStatus,
     append_trace,
@@ -487,3 +488,72 @@ def test_real_contextual_trace_persists_only_safe_result(
     )
     assert "EVIDENCE-CONTENT-SECRET" not in persisted
     assert "legacy_client" not in persisted
+
+
+def test_contextual_progress_covers_analysis_plan_and_completion(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+    events = []
+    times = iter((10.0, 12.5))
+    registry = {
+        "search_in_files": lambda **arguments: calls.append("search") or {
+            "ok": True,
+            "error": None,
+            "data": {"results": []},
+        }
+    }
+
+    result = try_execute_contextual_request(
+        SEARCH_REQUEST,
+        tmp_path,
+        ToolExecutor(registry),
+        registry=registry,
+        capability_config=_search_capabilities(),
+        policy_config=_policy(enabled=True),
+        progress_callback=events.append,
+        clock=lambda: next(times),
+    )
+
+    assert result.ok
+    assert calls == ["search"]
+    assert [event.stage for event in events] == [
+        ExecutionProgressStage.RECEIVED,
+        ExecutionProgressStage.ANALYZING,
+        ExecutionProgressStage.PLANNING,
+        ExecutionProgressStage.PLAN_READY,
+        ExecutionProgressStage.STEP_RUNNING,
+        ExecutionProgressStage.STEP_COMPLETED,
+        ExecutionProgressStage.COMPLETED,
+    ]
+    assert events[-1].elapsed_seconds == 2.5
+
+
+def test_contextual_failure_reports_step_failed_then_failed(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+    events = []
+    registry = {
+        "search_in_files": lambda **arguments: calls.append("search") or {
+            "ok": False,
+            "error": "TOP-SECRET-DETAIL",
+            "data": None,
+        }
+    }
+
+    result = try_execute_contextual_request(
+        SEARCH_REQUEST,
+        tmp_path,
+        ToolExecutor(registry),
+        registry=registry,
+        capability_config=_search_capabilities(),
+        policy_config=_policy(enabled=True),
+        progress_callback=events.append,
+    )
+
+    assert result.status is ContextualRuntimeStatus.FAILED
+    assert calls == ["search"]
+    assert events[-2].stage is ExecutionProgressStage.STEP_FAILED
+    assert events[-1].stage is ExecutionProgressStage.FAILED
+    assert "TOP-SECRET-DETAIL" not in repr(events)

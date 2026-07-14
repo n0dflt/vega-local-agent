@@ -2,7 +2,28 @@
 
 ## Unreleased
 
-No unreleased changes.
+Added:
+
+* Compact model-aware terminal prompt with Unicode and ASCII forms.
+* Request-local execution progress events for analysis, planning, validated plan
+  display, running/completed/failed steps, confirmation waits, skipped steps,
+  and terminal outcomes.
+* Dependency-free TTY and non-interactive progress rendering with an exact
+  plan-derived bar and elapsed completion time.
+
+Changed:
+
+* The contextual runtime and existing `execute_plan() -> ToolExecutor` path now
+  publish optional fail-soft progress callbacks. Renderer failures cannot retry
+  or alter tool execution.
+
+Security:
+
+* Progress events contain only bounded user-facing titles and counters. They do
+  not expose tool arguments, payloads, results, exception objects, tracebacks,
+  prompts, tokens, or other execution internals.
+* Execution progress is request-local and non-persistent; bounded execution
+  traces remain a separate opt-in diagnostic history.
 
 ## v2.13.0 - Controlled Coding Workflows
 

@@ -452,3 +452,25 @@ under locks, preserves valid trace records, quarantines ambiguous generated
 files, and never traverses arbitrary user paths. Diagnostics continue to observe
 the existing `contextual runtime -> plan execution -> PlanExecutor ->
 ToolExecutor` route without receiving tool authority.
+
+## Live execution progress boundary
+
+`core/execution_progress.py` defines immutable, request-local, payload-free
+events. `core/contextual_runtime.py` reports received, analysis, planning, and
+terminal outcomes, while `core/plan_executor.py` reports the validated plan and
+step observations around the one existing `ToolExecutor.execute()` call.
+Callbacks are optional and fail-soft; callback failures do not change the plan,
+permission result, tool outcome, or call count.
+
+`ui/terminal_prompt.py` and `ui/terminal_progress.py` turn those events into the
+interactive terminal experience. The renderer owns no execution state or
+background execution loop. TTY output may redraw one line, while redirected
+output is sequential and control-free. Unicode symbols have a complete ASCII
+fallback, and no percentage or bar is shown before the validated plan provides
+the real number of steps.
+
+Execution progress and execution traces deliberately share observations but not
+responsibilities: progress is ephemeral user-facing state with bounded titles
+and counters; traces are optional bounded diagnostic history. Neither surface
+receives tool arguments, payloads, results, prompts, secrets, exception objects,
+or raw tracebacks.

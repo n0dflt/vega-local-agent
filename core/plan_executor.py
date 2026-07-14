@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Iterable
 
+from core.execution_progress import (
+    ExecutionProgressEvent,
+    ExecutionProgressStage,
+    safe_progress_title,
+)
 from core.execution_plan import ExecutionPlan
 from core.execution_trace import (
     safe_trace_error_code,
@@ -168,6 +173,7 @@ def execute_plan(
     ),
     risk_by_tool: Mapping[str, str] | None = None,
     step_observer: Callable[[StepExecutionObservation], None] | None = None,
+    progress_callback: Callable[[ExecutionProgressEvent], object] | None = None,
 ) -> PlanExecutionResult:
     """
     Execute a fully validated plan through ToolExecutor.
@@ -197,6 +203,35 @@ def execute_plan(
         configured_risks = dict(risk_by_tool or {})
     except Exception:
         configured_risks = {}
+
+    titles = tuple(
+        safe_progress_title(step.description) or f"Операция {position}"
+        for position, step in enumerate(plan.steps, 1)
+    )
+    ordinal_by_step_id = {
+        step.step_id: position
+        for position, step in enumerate(plan.steps, 1)
+    }
+    title_by_step_id = {
+        step.step_id: titles[position - 1]
+        for position, step in enumerate(plan.steps, 1)
+    }
+
+    def report(event: ExecutionProgressEvent) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(event)
+        except Exception:
+            return
+
+    report(
+        ExecutionProgressEvent(
+            stage=ExecutionProgressStage.PLAN_READY,
+            total_steps=len(plan.steps),
+            plan_titles=titles,
+        )
+    )
 
     def observe(
         step,
@@ -236,6 +271,18 @@ def execute_plan(
             not in allowed_permissions
         ):
             observe(step, "blocked", "permission_not_automatic")
+            position = ordinal_by_step_id[step.step_id]
+            report(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.AWAITING_CONFIRMATION,
+                    current_step=position,
+                    total_steps=len(plan.steps),
+                    title=(
+                        "Ожидаю подтверждение: "
+                        f"{title_by_step_id[step.step_id]}"
+                    ),
+                )
+            )
             return PlanExecutionResult(
                 status=PlanExecutionStatus.BLOCKED,
                 goal=plan.goal,
@@ -250,6 +297,18 @@ def execute_plan(
 
         if step.tool_name not in registered_tools:
             observe(step, "blocked", "tool_unregistered")
+            position = ordinal_by_step_id[step.step_id]
+            report(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.STEP_FAILED,
+                    current_step=position,
+                    total_steps=len(plan.steps),
+                    title=(
+                        f"Шаг «{title_by_step_id[step.step_id]}» "
+                        "недоступен"
+                    ),
+                )
+            )
             return PlanExecutionResult(
                 status=PlanExecutionStatus.BLOCKED,
                 goal=plan.goal,
@@ -265,6 +324,8 @@ def execute_plan(
     step_results: list[StepExecutionResult] = []
 
     for step in plan.steps:
+        position = ordinal_by_step_id[step.step_id]
+        title = title_by_step_id[step.step_id]
         missing_dependencies = [
             dependency
             for dependency in step.depends_on
@@ -273,6 +334,17 @@ def execute_plan(
 
         if missing_dependencies:
             observe(step, "failed", "incomplete_dependencies")
+            report(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.STEP_FAILED,
+                    current_step=position,
+                    total_steps=len(plan.steps),
+                    title=(
+                        f"Шаг «{title}» "
+                        "завершился с ошибкой"
+                    ),
+                )
+            )
             return PlanExecutionResult(
                 status=PlanExecutionStatus.FAILED,
                 goal=plan.goal,
@@ -284,6 +356,15 @@ def execute_plan(
                 blocked_step_id=step.step_id,
                 blocked_tool_name=step.tool_name,
             )
+
+        report(
+            ExecutionProgressEvent(
+                stage=ExecutionProgressStage.STEP_RUNNING,
+                current_step=position,
+                total_steps=len(plan.steps),
+                title=title,
+            )
+        )
 
         try:
             tool_result = executor.execute(
@@ -343,6 +424,17 @@ def execute_plan(
         )
 
         if not tool_result.ok:
+            report(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.STEP_FAILED,
+                    current_step=position,
+                    total_steps=len(plan.steps),
+                    title=(
+                        f"Шаг «{title}» "
+                        "завершился с ошибкой"
+                    ),
+                )
+            )
             detail = (
                 tool_result.error
                 or tool_result.status.value
@@ -361,6 +453,14 @@ def execute_plan(
             )
 
         completed_step_ids.add(step.step_id)
+        report(
+            ExecutionProgressEvent(
+                stage=ExecutionProgressStage.STEP_COMPLETED,
+                current_step=position,
+                total_steps=len(plan.steps),
+                title=title,
+            )
+        )
 
     return PlanExecutionResult(
         status=PlanExecutionStatus.COMPLETED,

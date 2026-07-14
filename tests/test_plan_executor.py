@@ -1,5 +1,6 @@
 import pytest
 
+from core.execution_progress import ExecutionProgressStage
 from core.execution_plan import (
     ExecutionPlan,
     ToolCallStep,
@@ -401,3 +402,74 @@ def test_unexpected_executor_exception_fails_once_with_safe_code() -> None:
     assert calls == ["read"]
     assert result.steps[0].error_code == "tool_execution_failed"
     assert "TOP-SECRET-TRACE" not in repr(result)
+
+
+def test_progress_events_follow_real_execution_once() -> None:
+    calls: list[str] = []
+    events = []
+    plan = _plan(
+        ToolCallStep(
+            1,
+            "read",
+            required_permission="READ",
+            description="Read project",
+        )
+    )
+
+    result = execute_plan(
+        plan,
+        ToolExecutor({"read": lambda: calls.append("read")}),
+        progress_callback=events.append,
+    )
+
+    assert result.ok
+    assert calls == ["read"]
+    assert [event.stage for event in events] == [
+        ExecutionProgressStage.PLAN_READY,
+        ExecutionProgressStage.STEP_RUNNING,
+        ExecutionProgressStage.STEP_COMPLETED,
+    ]
+    assert all("arguments" not in repr(event) for event in events)
+
+
+def test_progress_callback_failure_never_repeats_tool() -> None:
+    calls: list[str] = []
+    plan = _plan(ToolCallStep(1, "read", required_permission="READ"))
+
+    def broken_progress(event) -> None:
+        raise RuntimeError("renderer failed")
+
+    result = execute_plan(
+        plan,
+        ToolExecutor({"read": lambda: calls.append("read")}),
+        progress_callback=broken_progress,
+    )
+
+    assert result.ok
+    assert calls == ["read"]
+
+
+def test_confirmation_progress_is_not_step_completion() -> None:
+    events = []
+    calls: list[str] = []
+    plan = _plan(
+        ToolCallStep(
+            1,
+            "write",
+            required_permission="WRITE",
+            description="Update file",
+        )
+    )
+
+    result = execute_plan(
+        plan,
+        ToolExecutor({"write": lambda: calls.append("write")}),
+        progress_callback=events.append,
+    )
+
+    assert result.status is PlanExecutionStatus.BLOCKED
+    assert calls == []
+    assert [event.stage for event in events] == [
+        ExecutionProgressStage.PLAN_READY,
+        ExecutionProgressStage.AWAITING_CONFIRMATION,
+    ]

@@ -1265,7 +1265,15 @@ def main() -> int:
 
     while True:
         try:
-            raw_input = input("VEGA> ")
+            from ui.terminal_prompt import render_terminal_prompt
+
+            raw_input = input(
+                render_terminal_prompt(
+                    load_model_name(context.project_root),
+                    "LOCAL",
+                    stream=sys.stdout,
+                )
+            )
         except (EOFError, KeyboardInterrupt):
             print("\nBye.")
             append_log(
@@ -1375,8 +1383,27 @@ def main() -> int:
                 f"{result.kind!r}."
             )
 
+        from core.execution_progress import (
+            ExecutionProgressEvent,
+            ExecutionProgressStage,
+        )
+        from ui.terminal_progress import TerminalProgressRenderer
+
+        progress_renderer = TerminalProgressRenderer(sys.stdout)
+
         if result.message:
             print(result.message)
+            progress_renderer(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.RECEIVED,
+                )
+            )
+            progress_renderer(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.ANALYZING,
+                    title="VEGA готовит ответ…",
+                )
+            )
 
         if not result.message:
             from core.contextual_runtime import (
@@ -1397,6 +1424,7 @@ def main() -> int:
                             trace,
                         )
                     ),
+                    progress_callback=progress_renderer,
                 )
             )
 
@@ -1422,6 +1450,7 @@ def main() -> int:
                             "CONTEXTUAL_SYNTHESIS_FALLBACK",
                             contextual_result.synthesis_result.reason,
                         )
+                progress_renderer.close()
                 continue
 
         model = load_model_name(
@@ -1456,6 +1485,13 @@ def main() -> int:
                 )
             )
             print(response)
+            progress_renderer(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.FAILED,
+                    title="Выбранная модель недоступна",
+                )
+            )
+            progress_renderer.close()
             append_log(
                 context.log_file,
                 "ERROR",
@@ -1537,6 +1573,22 @@ def main() -> int:
         )
 
         label = "VEGA" if ok else "ERROR"
+
+        progress_renderer(
+            ExecutionProgressEvent(
+                stage=(
+                    ExecutionProgressStage.COMPLETED
+                    if ok
+                    else ExecutionProgressStage.FAILED
+                ),
+                title=(
+                    "Ответ готов"
+                    if ok
+                    else "Не удалось получить ответ модели"
+                ),
+            )
+        )
+        progress_renderer.close()
 
         print(response)
         append_log(

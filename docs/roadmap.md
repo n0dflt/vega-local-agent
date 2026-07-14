@@ -306,3 +306,14 @@ Implemented in `feature/v2.13-controlled-coding-workflows`:
 
 See [`docs/v2.13-architecture.md`](v2.13-architecture.md). The next release scope
 is `TBD`.
+
+## Live Execution UX patch status
+
+Status: `implemented on feature/v2.11-live-execution-ux`
+
+The patch adds the model-aware Unicode/ASCII prompt, honest analysis and
+planning spinner states, one-time validated plan display, exact step progress,
+confirmation/skipped/failure/success states, and fail-soft renderer integration
+with the existing contextual `ToolExecutor` path. Execution progress remains
+ephemeral and payload-free; v2.10 execution traces remain separate bounded
+diagnostic history. The stable release identity is not downgraded from v2.13.0.

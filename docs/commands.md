@@ -301,3 +301,16 @@ empty or unknown input, EOF, `KeyboardInterrupt`, and callback errors reject or
 cancel it. Non-interactive confirmation-required commands remain blocked. The
 internal confirmation token is not displayed, and confirmation metadata is not
 passed to tool callables.
+
+## Interactive prompt and live status
+
+The task prompt displays the active model and the local runtime label. Unicode
+terminals receive the compact two-line prompt; unsupported terminals receive a
+plain ASCII form. Color is optional, and disabling it emits no ANSI sequences.
+
+For supported natural-language execution, VEGA reports analysis and planning
+with an indeterminate spinner. Percentages and progress bars begin only after a
+real validated plan is available. Plan titles are bounded user-facing labels;
+tool arguments, payloads, results, prompts, secrets, exception objects, and raw
+tracebacks are not rendered. Interactive TTYs can redraw a status line, while
+redirected and non-interactive output remains a sequence of normal lines.

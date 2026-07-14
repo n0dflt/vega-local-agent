@@ -921,6 +921,35 @@ text, prompts, evidence, arguments, results, payloads, handlers, callbacks,
 tokens, grants, environment values, secrets, full local paths, URL query
 parameters, and raw exceptions.
 
+## Live execution terminal UX
+
+The interactive CLI uses the selected model and local environment state in a
+compact prompt:
+
+```text
+╭─ VEGA ─ qwen2.5-coder:14b ─ LOCAL
+╰─› Напишите задачу…
+```
+
+Before a plan exists, VEGA shows only received, analysis, and planning spinner
+states—never a guessed percentage or synthetic progress bar. Once the real
+validated plan exists, the CLI displays its bounded user-facing step titles and
+uses the actual step count for live running, confirmation, completed, skipped,
+failed, and final states.
+
+TTY output may redraw one status line. Redirected output and tests receive plain
+sequential lines with no control sequences; terminals without Unicode use an
+ASCII prompt, spinner, symbols, and bar. The renderer has no background thread
+and flushes every update.
+
+Progress callbacks observe the existing
+`contextual runtime -> execute_plan() -> ToolExecutor` path and are fail-soft:
+the UI cannot execute tools, change a plan, grant permission, or cause a retry.
+Progress events contain only bounded titles and counters. They exclude tool
+arguments, payloads, results, exception objects, tracebacks, prompts, and
+secrets. Execution progress is ephemeral current UI state; execution traces
+remain separate bounded diagnostic history.
+
 Persistence is disabled by default. Set `VEGA_EXECUTION_TRACE` to `1`, `true`,
 `yes`, or `on` to append UTF-8 JSONL to
 `logs/diagnostics/execution-traces.jsonl`. The active file is limited to 5 MiB

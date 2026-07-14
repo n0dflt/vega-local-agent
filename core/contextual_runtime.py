@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import time
 from typing import Any
 
 from core.context_budget import ContextBudgetResult, apply_context_budget
@@ -25,6 +26,10 @@ from core.execution_trace import (
     TraceRecorder,
     TraceStatus,
     TraceStep,
+)
+from core.execution_progress import (
+    ExecutionProgressEvent,
+    ExecutionProgressStage,
 )
 from core.intent_analyzer import analyze_intent
 from core.model_selection import (
@@ -103,6 +108,8 @@ def try_execute_contextual_request(
     installed_models: Sequence[str] | None = None,
     production_snapshot: ProductionSnapshot | None = None,
     trace_callback: Callable[[ExecutionTrace], object] | None = None,
+    progress_callback: Callable[[ExecutionProgressEvent], object] | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> ContextualRuntimeResult:
     """
     Attempt contextual execution before model fallback.
@@ -127,6 +134,38 @@ def try_execute_contextual_request(
             status=ContextualRuntimeStatus.NOT_HANDLED,
             reason="empty_input",
         )
+
+    try:
+        started_at = float(clock())
+    except Exception:
+        started_at = 0.0
+
+    def report_progress(event: ExecutionProgressEvent) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(event)
+        except Exception:
+            return
+
+    def elapsed_seconds() -> float:
+        try:
+            return max(0.0, float(clock()) - started_at)
+        except Exception:
+            return 0.0
+
+    def report_failure(title: str) -> None:
+        report_progress(
+            ExecutionProgressEvent(
+                stage=ExecutionProgressStage.FAILED,
+                title=title,
+                elapsed_seconds=elapsed_seconds(),
+            )
+        )
+
+    report_progress(
+        ExecutionProgressEvent(stage=ExecutionProgressStage.RECEIVED)
+    )
 
     recorder = TraceRecorder(request_type="contextual")
 
@@ -157,6 +196,7 @@ def try_execute_contextual_request(
                 "production_snapshot must be a ProductionSnapshot instance"
             )
         if not production_snapshot.can_execute_tools:
+            report_failure("Выполнение заблокировано политикой безопасности")
             return ContextualRuntimeResult(
                 status=ContextualRuntimeStatus.BLOCKED,
                 message=_BLOCKED_MESSAGE,
@@ -174,6 +214,7 @@ def try_execute_contextual_request(
     try:
         root = Path(project_root).resolve()
     except (OSError, RuntimeError, TypeError, ValueError):
+        report_failure("Не удалось проверить рабочую папку")
         return ContextualRuntimeResult(
             status=ContextualRuntimeStatus.FAILED,
             message="Contextual runtime could not validate the project root.",
@@ -185,6 +226,7 @@ def try_execute_contextual_request(
         )
 
     if not root.is_dir():
+        report_failure("Не удалось проверить рабочую папку")
         return ContextualRuntimeResult(
             status=ContextualRuntimeStatus.FAILED,
             message="Contextual runtime could not validate the project root.",
@@ -226,6 +268,7 @@ def try_execute_contextual_request(
             policy_config
         )
     except Exception:
+        report_failure("Не удалось проверить правила маршрутизации")
         return ContextualRuntimeResult(
             status=ContextualRuntimeStatus.FAILED,
             message="Contextual routing policy could not be validated.",
@@ -242,9 +285,14 @@ def try_execute_contextual_request(
             reason="disabled_by_policy",
         )
 
+    report_progress(
+        ExecutionProgressEvent(stage=ExecutionProgressStage.ANALYZING)
+    )
+
     try:
         analysis = analyze_intent(normalized_text)
     except Exception:
+        report_failure("Не удалось безопасно проанализировать запрос")
         return ContextualRuntimeResult(
             status=ContextualRuntimeStatus.FAILED,
             message="The request could not be analyzed safely.",
@@ -329,6 +377,7 @@ def try_execute_contextual_request(
         except Exception:
             note_trace_recording_failure()
     except Exception:
+        report_failure("Не удалось выбрать модель")
         return ContextualRuntimeResult(
             status=ContextualRuntimeStatus.FAILED,
             message="Model routing could not be validated.",
@@ -338,6 +387,10 @@ def try_execute_contextual_request(
                 "model_policy_error",
             ),
         )
+
+    report_progress(
+        ExecutionProgressEvent(stage=ExecutionProgressStage.PLANNING)
+    )
 
     try:
         route_result = route_contextual_request(
@@ -349,6 +402,7 @@ def try_execute_contextual_request(
             preview=False,
         )
     except Exception:
+        report_failure("Не удалось безопасно построить план")
         return ContextualRuntimeResult(
             status=ContextualRuntimeStatus.FAILED,
             message="The request could not be planned safely.",
@@ -426,6 +480,7 @@ def try_execute_contextual_request(
         ),
         risk_by_tool=permission_risks,
         step_observer=observe_step,
+        progress_callback=report_progress,
     )
 
     status_map = {
@@ -519,6 +574,37 @@ def try_execute_contextual_request(
         PlanExecutionStatus.FAILED: TraceStatus.FAILED,
     }[execution_result.status]
     execution_trace = finish_trace(trace_status)
+
+    total_steps = len(route_result.plan.steps)
+    if execution_result.status is PlanExecutionStatus.COMPLETED:
+        report_progress(
+            ExecutionProgressEvent(
+                stage=ExecutionProgressStage.COMPLETED,
+                current_step=total_steps,
+                total_steps=total_steps,
+                title="Готово",
+                elapsed_seconds=elapsed_seconds(),
+            )
+        )
+    elif not (
+        execution_result.status is PlanExecutionStatus.BLOCKED
+        and route_result.requires_confirmation
+    ):
+        current_step = 0
+        if execution_result.blocked_step_id is not None:
+            for position, step in enumerate(route_result.plan.steps, 1):
+                if step.step_id == execution_result.blocked_step_id:
+                    current_step = position
+                    break
+        report_progress(
+            ExecutionProgressEvent(
+                stage=ExecutionProgressStage.FAILED,
+                current_step=current_step,
+                total_steps=total_steps,
+                title="Выполнение завершилось с ошибкой",
+                elapsed_seconds=elapsed_seconds(),
+            )
+        )
 
     return ContextualRuntimeResult(
         status=status_map[execution_result.status],
