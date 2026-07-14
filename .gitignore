@@ -67,6 +67,9 @@ logs/terminal/
 logs/diagnostics/execution-traces.jsonl
 logs/diagnostics/execution-traces.jsonl.*
 logs/diagnostics/reports/
+logs/diagnostics/quarantine/
+logs/diagnostics/.*.lock
+logs/diagnostics/*.tmp
 
 # Runtime web audit logs
 logs/web/*.jsonl

@@ -24,18 +24,30 @@ from core.execution_trace import (
     scan_trace_store,
     trace_persistence_enabled,
 )
+from core.state_integrity import (
+    MAX_LOCK_TIMEOUT_MS,
+    MAX_QUARANTINE_FILES,
+    MAX_STALE_TEMP_AGE_SECONDS,
+    MAX_STATE_SCAN_FILES,
+    STATE_ERROR_CODES,
+    GeneratedStateLock,
+    StateIntegrityDiagnostics,
+    StateLockError,
+    inspect_local_state,
+)
 from scripts.version import VERSION
 
 
 DIAGNOSTICS_POLICY_RELATIVE_PATH = Path("config/diagnostics_policy.json")
-DIAGNOSTICS_SCHEMA_VERSION = 1
-REPORT_SCHEMA_VERSION = 1
+DIAGNOSTICS_SCHEMA_VERSION = 2
+REPORT_SCHEMA_VERSION = 2
 MAX_DOCTOR_REPORT_BYTES = 1024 * 1024
 MAX_RETAINED_DOCTOR_REPORTS = 20
 MAX_REPORT_RETENTION_SCAN_FILES = 100
 MAX_INDEX_BYTES = 5 * 1024 * 1024
 MAX_COUNT = 1_000_000
 MAX_DIAGNOSTIC_CODES = 32
+MAX_DIAGNOSTICS_PATH_CHARS = 240
 
 _POLICY_FIELDS = frozenset(
     {
@@ -48,6 +60,10 @@ _POLICY_FIELDS = frozenset(
         "doctor_reports_dir",
         "max_doctor_report_bytes",
         "retained_doctor_reports",
+        "lock_timeout_ms",
+        "stale_temp_age_seconds",
+        "max_state_scan_files",
+        "retained_quarantine_files",
     }
 )
 _BLOCKED_PATH_PARTS = frozenset(
@@ -84,6 +100,7 @@ _ERROR_CODES = frozenset(
         "trace_record_invalid",
         "trace_scan_limit_reached",
     }
+    | STATE_ERROR_CODES
 )
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _REPORT_NAME = re.compile(r"^doctor-\d{8}T\d{12}Z\.json$")
@@ -127,6 +144,10 @@ def _validate_relative_path(root: Path, value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise DiagnosticsPolicyError(f"{field} must be a non-empty relative path")
     raw = value.strip().replace("\\", "/")
+    if len(raw) > MAX_DIAGNOSTICS_PATH_CHARS:
+        raise DiagnosticsPolicyError(
+            f"{field} must be at most {MAX_DIAGNOSTICS_PATH_CHARS} characters"
+        )
     candidate = Path(raw)
     if candidate.is_absolute() or candidate.drive or raw.startswith(("/", "\\")):
         raise DiagnosticsPolicyError(f"{field} cannot be absolute")
@@ -157,6 +178,10 @@ class DiagnosticsPolicy:
     doctor_reports_dir: str
     max_doctor_report_bytes: int
     retained_doctor_reports: int
+    lock_timeout_ms: int
+    stale_temp_age_seconds: int
+    max_state_scan_files: int
+    retained_quarantine_files: int
 
     def __post_init__(self) -> None:
         if self.schema_version != DIAGNOSTICS_SCHEMA_VERSION:
@@ -169,6 +194,7 @@ class DiagnosticsPolicy:
             if (
                 not isinstance(value, str)
                 or not value
+                or len(value) > MAX_DIAGNOSTICS_PATH_CHARS
                 or candidate.is_absolute()
                 or candidate.drive
                 or ".." in candidate.parts
@@ -198,6 +224,26 @@ class DiagnosticsPolicy:
             "retained_doctor_reports",
             MAX_RETAINED_DOCTOR_REPORTS,
         )
+        _integer(self.lock_timeout_ms, "lock_timeout_ms", MAX_LOCK_TIMEOUT_MS)
+        _integer(
+            self.stale_temp_age_seconds,
+            "stale_temp_age_seconds",
+            MAX_STALE_TEMP_AGE_SECONDS,
+        )
+        _integer(
+            self.max_state_scan_files,
+            "max_state_scan_files",
+            MAX_STATE_SCAN_FILES,
+        )
+        _integer(
+            self.retained_quarantine_files,
+            "retained_quarantine_files",
+            MAX_QUARANTINE_FILES,
+        )
+        if self.retained_quarantine_files > self.max_state_scan_files:
+            raise DiagnosticsPolicyError(
+                "retained_quarantine_files exceeds max_state_scan_files"
+            )
 
     @classmethod
     def defaults(cls, project_root: Path) -> "DiagnosticsPolicy":
@@ -220,6 +266,10 @@ class DiagnosticsPolicy:
             ),
             max_doctor_report_bytes=512 * 1024,
             retained_doctor_reports=10,
+            lock_timeout_ms=500,
+            stale_temp_age_seconds=3600,
+            max_state_scan_files=64,
+            retained_quarantine_files=10,
         )
 
 
@@ -277,6 +327,24 @@ def load_diagnostics_policy(project_root: Path) -> DiagnosticsPolicy:
             raw["retained_doctor_reports"],
             "retained_doctor_reports",
             MAX_RETAINED_DOCTOR_REPORTS,
+        ),
+        lock_timeout_ms=_integer(
+            raw["lock_timeout_ms"], "lock_timeout_ms", MAX_LOCK_TIMEOUT_MS
+        ),
+        stale_temp_age_seconds=_integer(
+            raw["stale_temp_age_seconds"],
+            "stale_temp_age_seconds",
+            MAX_STALE_TEMP_AGE_SECONDS,
+        ),
+        max_state_scan_files=_integer(
+            raw["max_state_scan_files"],
+            "max_state_scan_files",
+            MAX_STATE_SCAN_FILES,
+        ),
+        retained_quarantine_files=_integer(
+            raw["retained_quarantine_files"],
+            "retained_quarantine_files",
+            MAX_QUARANTINE_FILES,
         ),
     )
 
@@ -600,6 +668,7 @@ class RuntimeDiagnosticsReport:
     memory: CountedSubsystemDiagnostics
     terminal_policy: CountedSubsystemDiagnostics
     execution_traces: TraceStoreDiagnostics
+    local_state: StateIntegrityDiagnostics
     runtime_files: RuntimeFilesDiagnostics
 
     def __post_init__(self) -> None:
@@ -628,6 +697,7 @@ class RuntimeDiagnosticsReport:
             "memory": self.memory.to_safe_dict(),
             "terminal_policy": self.terminal_policy.to_safe_dict(),
             "execution_traces": self.execution_traces.to_safe_dict(),
+            "local_state": self.local_state.to_safe_dict(),
             "runtime_files": self.runtime_files.to_safe_dict(),
         }
 
@@ -872,6 +942,24 @@ def build_runtime_diagnostics(
         terminal = CountedSubsystemDiagnostics("unavailable", False, 0, ("terminal_policy_error",))
         errors.append("diagnostics_build_failed")
     traces = get_trace_store_status(root, active_policy)
+    try:
+        local_state = inspect_local_state(root, active_policy)
+    except Exception:
+        local_state = StateIntegrityDiagnostics(
+            lock_available=False,
+            stale_temporary_files=0,
+            recoverable_torn_trace_tail=False,
+            corrupted_generated_files=0,
+            quarantined_files=0,
+            scan_limit_reached=False,
+            trace_store_path=active_policy.trace_store_path,
+            reports_path=active_policy.doctor_reports_dir,
+            quarantine_path=(
+                Path(active_policy.trace_store_path).parent / "quarantine"
+            ).as_posix(),
+            error_codes=("state_lock_operation_failed",),
+        )
+        errors.append("diagnostics_build_failed")
     runtime_files = RuntimeFilesDiagnostics(
         smoke_test_exists=(root / "scripts" / "smoke_test.py").is_file(),
         release_policy_exists=(root / "config" / "release_policy.json").is_file(),
@@ -883,7 +971,7 @@ def build_runtime_diagnostics(
             errors.append("production_snapshot_blocked")
     elif errors or any(
         section.status != "healthy"
-        for section in (model, documents, memory, terminal, traces)
+        for section in (model, documents, memory, terminal, traces, local_state)
     ):
         overall = "degraded"
     else:
@@ -905,6 +993,7 @@ def build_runtime_diagnostics(
         memory=memory,
         terminal_policy=terminal,
         execution_traces=traces,
+        local_state=local_state,
         runtime_files=runtime_files,
     )
 
@@ -975,22 +1064,35 @@ def export_diagnostics_report(
     temporary: Path | None = None
     try:
         directory.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="\n",
-            dir=directory,
-            prefix=f".{filename}.",
-            suffix=".tmp",
-            delete=False,
-        ) as stream:
-            temporary = Path(stream.name)
-            stream.write(serialized)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-        temporary = None
+        with GeneratedStateLock(
+            root,
+            directory,
+            "reports",
+            active_policy.lock_timeout_ms,
+        ):
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="\n",
+                dir=directory,
+                prefix=f".{filename}.",
+                suffix=".tmp",
+                delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(serialized)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, target)
+            temporary = None
+            try:
+                _retain_reports(directory, active_policy.retained_doctor_reports)
+            except OSError:
+                # The completed atomic export remains valid; retention is best effort.
+                pass
+    except StateLockError as exc:
+        raise DiagnosticsExportError(exc.code) from exc
     except OSError as exc:
         raise DiagnosticsExportError("diagnostics_export_failed") from exc
     finally:
@@ -999,11 +1101,6 @@ def export_diagnostics_report(
                 temporary.unlink(missing_ok=True)
             except OSError:
                 pass
-    try:
-        _retain_reports(directory, active_policy.retained_doctor_reports)
-    except OSError:
-        # The newly completed atomic export remains valid; retention is best effort.
-        pass
     relative = target.relative_to(root).as_posix()
     return DiagnosticsExportResult(relative, active_report)
 
@@ -1028,6 +1125,7 @@ def format_diagnostics_summary(report: RuntimeDiagnosticsReport) -> str:
             f"Execution tracing: {'enabled' if trace.enabled else 'disabled'}",
             f"Trace store: {trace.store_path}",
             f"Trace records scanned: {trace.valid_records}",
+            f"Local state integrity: {report.local_state.status}",
         )
     )
 
@@ -1078,6 +1176,7 @@ __all__ = [
     "ProductionDiagnostics",
     "RuntimeDiagnosticsReport",
     "RuntimeFilesDiagnostics",
+    "StateIntegrityDiagnostics",
     "TraceAggregateDiagnostics",
     "TraceLatestDiagnostics",
     "TraceStoreDiagnostics",

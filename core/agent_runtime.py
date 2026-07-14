@@ -519,6 +519,12 @@ def handle_doctor_command(root: Path, command: str = "/doctor") -> None:
         get_trace_store_status,
         load_diagnostics_policy,
     )
+    from core.state_integrity import (
+        format_state_repair,
+        format_state_status,
+        inspect_local_state,
+        repair_local_state,
+    )
 
     usage = "\n".join(
         (
@@ -528,10 +534,18 @@ def handle_doctor_command(root: Path, command: str = "/doctor") -> None:
             "  /doctor trace status",
             "  /doctor trace latest",
             "  /doctor trace summary",
+            "  /doctor state status",
+            "  /doctor state repair",
             "  /doctor export",
         )
     )
-    normalized = " ".join(command.strip().lower().split())
+    raw_command = command.strip()
+    normalized = " ".join(raw_command.lower().split())
+    exact_state_commands = {"/doctor state status", "/doctor state repair"}
+    if normalized.startswith("/doctor state") and raw_command not in exact_state_commands:
+        print("Unknown doctor command.")
+        print(usage)
+        return
     if normalized == "/doctor help":
         print(usage)
         return
@@ -540,6 +554,8 @@ def handle_doctor_command(root: Path, command: str = "/doctor") -> None:
         "/doctor trace status",
         "/doctor trace latest",
         "/doctor trace summary",
+        "/doctor state status",
+        "/doctor state repair",
         "/doctor export",
     }
     if normalized not in known:
@@ -581,6 +597,17 @@ def handle_doctor_command(root: Path, command: str = "/doctor") -> None:
             print("Execution tracing is disabled.")
             return
         print(format_trace_aggregate(status.aggregate))
+        return
+
+    if raw_command == "/doctor state status":
+        try:
+            print(format_state_status(inspect_local_state(root, policy)))
+        except Exception:
+            print("Local state integrity unavailable: state_lock_operation_failed.")
+        return
+
+    if raw_command == "/doctor state repair":
+        print(format_state_repair(repair_local_state(root, policy)))
         return
 
     if normalized == "/doctor export":
