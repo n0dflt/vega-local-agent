@@ -33,6 +33,13 @@ class TaskInterpretation:
     original_text: str
     source_path: str | None = None
     search_query: str | None = None
+    workspace: str = "current_workspace"
+    run_tests: bool = False
+    run_compileall: bool = False
+    allow_file_changes: bool = True
+    allow_dependency_installation: bool = True
+    allow_network: bool = True
+    report_required: bool = False
     output_format: OutputFormat = OutputFormat.UNSPECIFIED
     constraints: Tuple[str, ...] = ()
     matched_values: Mapping[str, str] = field(
@@ -79,12 +86,26 @@ class TaskInterpretation:
                 "original_text must not be empty"
             )
 
+        if not self.workspace.strip():
+            raise TaskInterpretationError(
+                "workspace must not be empty"
+            )
+
     def to_dict(self) -> dict[str, object]:
         return {
             "intent": self.intent.value,
             "original_text": self.original_text,
             "source_path": self.source_path,
             "search_query": self.search_query,
+            "workspace": self.workspace,
+            "run_tests": self.run_tests,
+            "run_compileall": self.run_compileall,
+            "allow_file_changes": self.allow_file_changes,
+            "allow_dependency_installation": (
+                self.allow_dependency_installation
+            ),
+            "allow_network": self.allow_network,
+            "report_required": self.report_required,
             "output_format": self.output_format.value,
             "constraints": list(self.constraints),
             "matched_values": dict(self.matched_values),
@@ -257,6 +278,20 @@ def _extract_constraints(text: str) -> Tuple[str, ...]:
         constraints.append("read_only")
 
     if re.search(
+        r"(?:не устанавливай зависимост\w*|без установк\w+ зависимост\w*|"
+        r"do not install dependenc\w*|without installing dependenc\w*)",
+        normalized,
+    ):
+        constraints.append("no_dependency_installation")
+
+    if re.search(
+        r"(?:не используй сеть|без сетев\w+ действ\w*|"
+        r"do not use (?:the )?network|without network(?: access| actions)?)",
+        normalized,
+    ):
+        constraints.append("no_network")
+
+    if re.search(
         r"\b(?:только staged|staged only|индексированн\w*)\b",
         normalized,
     ):
@@ -293,12 +328,40 @@ def interpret_task(
             analysis.original_text,
             source_path,
         )
+        if (
+            search_query is None
+            and analysis.intent is IntentType.BUG_FIX
+        ):
+            search_query = analysis.normalized_text
 
     output_format = _detect_output_format(
         analysis.original_text
     )
     constraints = _extract_constraints(
         analysis.original_text
+    )
+
+    run_tests = bool(re.search(
+        r"\b(?:pytest|тест\w*|tests?|test suite)\b",
+        analysis.normalized_text,
+    ))
+    run_compileall = bool(re.search(
+        r"\b(?:compileall|compile[- ]?check|компиляц\w*)\b",
+        analysis.normalized_text,
+    ))
+    if analysis.intent is IntentType.WORKSPACE_DIAGNOSTICS:
+        # A general workspace diagnostic is a bounded validation workflow.
+        run_tests = True
+        run_compileall = True
+
+    read_only = "read_only" in constraints
+    no_dependencies = "no_dependency_installation" in constraints
+    no_network = "no_network" in constraints
+    workspace_diagnostics = (
+        analysis.intent is IntentType.WORKSPACE_DIAGNOSTICS
+    )
+    report_required = workspace_diagnostics or (
+        output_format in {OutputFormat.REPORT, OutputFormat.SUMMARY}
     )
 
     matched_values: dict[str, str] = {}
@@ -319,6 +382,15 @@ def interpret_task(
         original_text=analysis.original_text,
         source_path=source_path,
         search_query=search_query,
+        workspace="current_workspace",
+        run_tests=run_tests,
+        run_compileall=run_compileall,
+        allow_file_changes=not (read_only or workspace_diagnostics),
+        allow_dependency_installation=not (
+            no_dependencies or workspace_diagnostics
+        ),
+        allow_network=not (no_network or workspace_diagnostics),
+        report_required=report_required,
         output_format=output_format,
         constraints=constraints,
         matched_values=matched_values,

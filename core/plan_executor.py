@@ -22,6 +22,10 @@ from core.tool_executor import (
     ToolExecutor,
     ToolRequest,
 )
+from core.tool_confirmation import (
+    ToolConfirmationManager,
+    execute_tool_with_confirmation,
+)
 
 
 class PlanExecutionStatus(str, Enum):
@@ -171,6 +175,8 @@ def execute_plan(
         "READ",
         "DRAFT",
     ),
+    confirmation_permissions: Iterable[str] = (),
+    confirmation_manager: ToolConfirmationManager | None = None,
     risk_by_tool: Mapping[str, str] | None = None,
     step_observer: Callable[[StepExecutionObservation], None] | None = None,
     progress_callback: Callable[[ExecutionProgressEvent], object] | None = None,
@@ -180,7 +186,8 @@ def execute_plan(
 
     All steps are preflight-checked before the first tool call.
     Execution stops immediately after the first failed step.
-    Confirmation tokens are never generated or accepted here.
+    Confirmed permissions use the existing one-time confirmation manager;
+    without it, non-automatic steps remain blocked before execution.
     """
 
     if not isinstance(plan, ExecutionPlan):
@@ -195,6 +202,11 @@ def execute_plan(
 
     allowed_permissions = _normalize_permissions(
         automatic_permissions
+    )
+    confirmed_permissions = frozenset(
+        permission.strip().upper()
+        for permission in confirmation_permissions
+        if isinstance(permission, str) and permission.strip()
     )
     registered_tools = set(
         executor.registered_tools()
@@ -266,9 +278,13 @@ def execute_plan(
     # tool is called. This prevents partially executing a
     # plan whose later step is unsafe or unregistered.
     for step in plan.steps:
+        can_request_confirmation = (
+            confirmation_manager is not None
+            and step.required_permission in confirmed_permissions
+        )
         if (
-            step.required_permission
-            not in allowed_permissions
+            step.required_permission not in allowed_permissions
+            and not can_request_confirmation
         ):
             observe(step, "blocked", "permission_not_automatic")
             position = ordinal_by_step_id[step.step_id]
@@ -366,13 +382,29 @@ def execute_plan(
             )
         )
 
-        try:
-            tool_result = executor.execute(
-                ToolRequest(
-                    tool_name=step.tool_name,
-                    arguments=dict(step.arguments),
+        if step.required_permission not in allowed_permissions:
+            report(
+                ExecutionProgressEvent(
+                    stage=ExecutionProgressStage.AWAITING_CONFIRMATION,
+                    current_step=position,
+                    total_steps=len(plan.steps),
+                    title=f"Ожидаю подтверждение: {title}",
                 )
             )
+
+        try:
+            request = ToolRequest(
+                tool_name=step.tool_name,
+                arguments=dict(step.arguments),
+            )
+            if step.required_permission in allowed_permissions:
+                tool_result = executor.execute(request)
+            else:
+                tool_result = execute_tool_with_confirmation(
+                    executor,
+                    request,
+                    confirmation_manager,
+                )
         except Exception:
             tool_result = ToolExecutionResult(
                 status=ToolExecutionStatus.FAILED,

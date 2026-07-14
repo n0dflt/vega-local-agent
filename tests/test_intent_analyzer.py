@@ -93,3 +93,41 @@ def test_non_string_request_is_rejected() -> None:
     with pytest.raises(TypeError, match="text must be a string"):
         analyze_intent(None)  # type: ignore[arg-type]
 
+
+@pytest.mark.parametrize(
+    "user_text",
+    (
+        "Проведи безопасную диагностику текущего проекта. Не изменяй "
+        "файлы, не устанавливай зависимости и не используй сеть. "
+        "Проверь состояние проекта, запусти полный набор тестов и "
+        "python -m compileall, затем сформируй итоговый отчёт.",
+        "Запусти pytest и compileall для текущего проекта.",
+        "Без изменений проверь состояние проекта и скажи, готов ли "
+        "он к релизу.",
+        "Run the full test suite and compile-check the current repository "
+        "without modifying anything.",
+        "Inspect this workspace, execute pytest and compileall, and report "
+        "the results.",
+        "Проверь репозиторий, тесты и компиляцию Python-файлов без "
+        "сетевых действий.",
+        "Проанализируй документацию проекта, затем запусти pytest и "
+        "python -m compileall, ничего не изменяя.",
+    ),
+)
+def test_workspace_diagnostics_signals_win_over_document_words(
+    user_text: str,
+) -> None:
+    analysis = analyze_intent(user_text)
+
+    assert analysis.intent is IntentType.WORKSPACE_DIAGNOSTICS
+    assert analysis.confidence < 1.0
+
+
+def test_document_analysis_with_real_source_remains_supported() -> None:
+    analysis = analyze_intent(
+        r"Проанализируй файл docs\architecture.md и сделай краткий отчёт."
+    )
+
+    assert analysis.intent is IntentType.DOCUMENT_ANALYSIS
+    assert analysis.confidence < 1.0
+

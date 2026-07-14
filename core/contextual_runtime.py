@@ -18,6 +18,7 @@ from core.contextual_synthesis import (
 )
 from core.contextual_router import (
     ContextualRouteResult,
+    ContextualRoutingError,
     load_tool_routing_policy,
     route_contextual_request,
 )
@@ -45,6 +46,7 @@ from core.plan_executor import (
 )
 from core.production_snapshot import ProductionSnapshot
 from core.tool_executor import ToolExecutor
+from core.tool_confirmation import ToolConfirmationManager
 
 
 _BLOCKED_MESSAGE = "Contextual tool execution is blocked by production policy."
@@ -72,6 +74,7 @@ class ContextualRuntimeResult:
     model_decision: ModelSelectionDecision | None = None
     context_budget_result: ContextBudgetResult | None = None
     execution_trace: ExecutionTrace | None = None
+    planning_diagnostics: Mapping[str, object] | None = None
 
     @property
     def handled(self) -> bool:
@@ -107,6 +110,7 @@ def try_execute_contextual_request(
     ) = None,
     installed_models: Sequence[str] | None = None,
     production_snapshot: ProductionSnapshot | None = None,
+    confirmation_manager: ToolConfirmationManager | None = None,
     trace_callback: Callable[[ExecutionTrace], object] | None = None,
     progress_callback: Callable[[ExecutionProgressEvent], object] | None = None,
     clock: Callable[[], float] = time.monotonic,
@@ -401,11 +405,29 @@ def try_execute_contextual_request(
             workspace=root,
             preview=False,
         )
+    except ContextualRoutingError as exc:
+        report_failure("Не удалось безопасно построить план")
+        message = (
+            "VEGA rejected the generated plan because a required tool "
+            "argument was missing."
+            if exc.reason_code == "missing_required_argument"
+            else "VEGA could not build a valid plan from registered tools."
+        )
+        return ContextualRuntimeResult(
+            status=ContextualRuntimeStatus.FAILED,
+            message=message,
+            reason="routing_error",
+            execution_trace=finish_trace(
+                TraceStatus.FAILED,
+                "routing_error",
+            ),
+            planning_diagnostics=exc.diagnostics(),
+        )
     except Exception:
         report_failure("Не удалось безопасно построить план")
         return ContextualRuntimeResult(
             status=ContextualRuntimeStatus.FAILED,
-            message="The request could not be planned safely.",
+            message="VEGA could not build a valid plan from registered tools.",
             reason="routing_error",
             execution_trace=finish_trace(
                 TraceStatus.FAILED,
@@ -478,6 +500,10 @@ def try_execute_contextual_request(
         automatic_permissions=(
             policy.automatic_permissions
         ),
+        confirmation_permissions=(
+            policy.confirmation_permissions
+        ),
+        confirmation_manager=confirmation_manager,
         risk_by_tool=permission_risks,
         step_observer=observe_step,
         progress_callback=report_progress,

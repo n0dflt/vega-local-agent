@@ -1492,6 +1492,7 @@ def main() -> int:
                     tool_executor,
                     chat_callable=tracked_contextual_chat,
                     production_snapshot=production_runtime.snapshot,
+                    confirmation_manager=tool_confirmation_manager,
                     trace_callback=(
                         lambda trace: append_trace(
                             context.project_root,
@@ -1522,6 +1523,16 @@ def main() -> int:
                     "CONTEXTUAL",
                     contextual_result.message,
                 )
+                if contextual_result.planning_diagnostics is not None:
+                    append_log(
+                        context.log_file,
+                        "CONTEXTUAL_ROUTING",
+                        json.dumps(
+                            dict(contextual_result.planning_diagnostics),
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        ),
+                    )
                 if contextual_result.synthesis_result is not None:
                     context.append_message(
                         "user",

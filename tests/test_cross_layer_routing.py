@@ -24,8 +24,8 @@ def test_real_production_snapshot_has_no_blocking_consistency_issues() -> None:
     assert snapshot.consistency_report.degraded_issues == ()
     assert {
         issue.subject for issue in snapshot.consistency_report.warnings
-    } == {"bug_fix", "test_run"}
-    assert snapshot.consistency_report.summary == "fatal=0; degraded=0; warning=2"
+    } == {"bug_fix"}
+    assert snapshot.consistency_report.summary == "fatal=0; degraded=0; warning=1"
 
 
 def test_every_contextual_intent_has_one_complete_cross_layer_route() -> None:

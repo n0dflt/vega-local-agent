@@ -45,7 +45,7 @@ def test_production_catalog_contains_initial_safe_routes() -> None:
     }.issubset(names)
 
 
-def test_contextual_catalog_contains_only_allowed_tools() -> None:
+def test_contextual_catalog_contains_only_allowed_or_confirmed_tools() -> None:
     catalog = build_tool_catalog(
         TOOL_REGISTRY,
         CONFIG_PATH,
@@ -61,16 +61,20 @@ def test_contextual_catalog_contains_only_allowed_tools() -> None:
         for rule in policy.rules
     }
 
-    unsafe_tools = [
+    confirmed_tools = [
         tool.name
         for tool in catalog
-        if rules[tool.name].effect.value != "allow"
+        if rules[tool.name].effect.value == "confirm"
     ]
 
-    assert unsafe_tools == []
+    assert confirmed_tools == ["terminal_run", "test_run"]
+    assert all(
+        rules[tool.name].effect.value in {"allow", "confirm"}
+        for tool in catalog
+    )
 
 
-def test_confirmed_tools_are_not_automatically_routable() -> None:
+def test_only_bounded_diagnostic_confirmed_tools_are_routable() -> None:
     catalog = build_tool_catalog(
         TOOL_REGISTRY,
         CONFIG_PATH,
@@ -90,7 +94,6 @@ def test_confirmed_tools_are_not_automatically_routable() -> None:
         "propose_patch_from_file",
         "release_check",
         "rollback_patch",
-        "terminal_run",
-        "test_run",
         "web_fetch",
     }.isdisjoint(names)
+    assert {"terminal_run", "test_run"} <= names

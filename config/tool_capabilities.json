@@ -162,12 +162,26 @@
       ],
       "description": "Показать разрешённые команды терминала."
     },
+    "terminal_run": {
+      "permission": "EXECUTE",
+      "capabilities": [
+        "terminal.run"
+      ],
+      "description": "Запустить заранее разрешённую диагностическую команду."
+    },
     "test_list": {
       "permission": "READ",
       "capabilities": [
         "test.list"
       ],
       "description": "Показать доступные группы тестов."
+    },
+    "test_run": {
+      "permission": "EXECUTE",
+      "capabilities": [
+        "test.run"
+      ],
+      "description": "Запустить заранее определённую группу тестов проекта."
     }
   }
 }

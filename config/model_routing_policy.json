@@ -4,6 +4,7 @@
   "fallback_profile": "code",
   "intent_profiles": {
     "document_analysis": "docs",
+    "workspace_diagnostics": "fast",
     "project_search": "fast",
     "bug_fix": "code",
     "test_run": "fast",

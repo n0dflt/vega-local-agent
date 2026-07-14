@@ -8,6 +8,7 @@ from typing import Pattern, Tuple
 
 class IntentType(str, Enum):
     DOCUMENT_ANALYSIS = "document_analysis"
+    WORKSPACE_DIAGNOSTICS = "workspace_diagnostics"
     PROJECT_SEARCH = "project_search"
     BUG_FIX = "bug_fix"
     TEST_RUN = "test_run"
@@ -47,8 +48,15 @@ class IntentRule:
     intent: IntentType
     primary_patterns: Tuple[Pattern[str], ...]
     secondary_patterns: Tuple[Pattern[str], ...]
+    required_patterns: Tuple[Pattern[str], ...] = ()
 
     def evaluate(self, text: str) -> tuple[int, Tuple[str, ...]]:
+        if self.required_patterns and not any(
+            pattern.search(text) is not None
+            for pattern in self.required_patterns
+        ):
+            return 0, ()
+
         matches: list[str] = []
         score = 0
 
@@ -75,6 +83,23 @@ def _patterns(*values: str) -> Tuple[Pattern[str], ...]:
 
 
 _RULES: Tuple[IntentRule, ...] = (
+    IntentRule(
+        intent=IntentType.WORKSPACE_DIAGNOSTICS,
+        primary_patterns=_patterns(
+            r"\b(?:pytest|compileall)\b",
+            r"\b(?:тест\w*|test(?:s| suite)?)\b",
+            r"\b(?:проект\w*|репозитор\w*|workspace|repository)\b",
+            r"\b(?:диагностик\w*|провер(?:ь|ка) состояни\w*)\b",
+        ),
+        secondary_patterns=_patterns(
+            r"\b(?:запуст\w*|выполн\w*|run|execute)\b",
+            r"(?:без изменений|не изменяй|without modifying|read[- ]?only)",
+            r"\b(?:готов\w*|ready|readiness|отч[её]т\w*|report)\b",
+        ),
+        required_patterns=_patterns(
+            r"\b(?:compileall|проект\w*|репозитор\w*|workspace|repository)\b",
+        ),
+    ),
     IntentRule(
         intent=IntentType.RELEASE_CHECK,
         primary_patterns=_patterns(
@@ -146,10 +171,8 @@ _RULES: Tuple[IntentRule, ...] = (
         intent=IntentType.DOCUMENT_ANALYSIS,
         primary_patterns=_patterns(
             r"\bдокумент\w*",
-            r"\bфайл\w*",
             r"\b(?:document|file)\b",
-            r"\b(?:pdf|txt|md|docx|csv|json|ya?ml|toml)\b",
-            r"\bотч[её]т\w*",
+            r"(?:^|[\s\"'«])(?:[A-Za-z]:[\\/]|\.{0,2}[\\/])?[^\s\"'«»]+\.(?:pdf|txt|md|docx|csv|json|ya?ml|toml)\b",
         ),
         secondary_patterns=_patterns(
             r"\bпроанализ\w*",
@@ -158,6 +181,7 @@ _RULES: Tuple[IntentRule, ...] = (
             r"\bсводк\w*",
             r"\bsummar\w*",
             r"\banaly[sz]\w*",
+            r"\bотч[её]т\w*|\breport\b",
         ),
     ),
     IntentRule(
@@ -236,7 +260,9 @@ def analyze_intent(text: str) -> IntentAnalysis:
             normalized_text=normalized,
         )
 
-    confidence = min(1.0, round(0.4 + best_score * 0.1, 2))
+    # The deterministic feature scorer is intentionally capped below 1.0:
+    # heuristic text signals are never absolute proof of user intent.
+    confidence = min(0.95, round(0.4 + best_score * 0.1, 2))
 
     return IntentAnalysis(
         intent=best_intent,

@@ -5,15 +5,33 @@ from typing import Iterable, Mapping, Tuple
 
 from core.execution_plan import ExecutionPlan, ToolCallStep
 from core.intent_analyzer import IntentAnalysis, IntentType
-from core.task_interpreter import TaskInterpretation
+from core.task_interpreter import TaskInterpretation, interpret_task
 from core.tool_argument_builder import (
     ToolArgumentError,
     build_tool_arguments,
+    validate_tool_arguments,
 )
 
 
 class ToolPlanningError(ValueError):
     """Raised when a safe execution plan cannot be constructed."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason_code: str = "planning_failed",
+        capability: str = "",
+        candidate_tool: str = "",
+        missing_field: str = "",
+        fallback_attempts: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+        self.capability = capability
+        self.candidate_tool = candidate_tool
+        self.missing_field = missing_field
+        self.fallback_attempts = fallback_attempts
 
 
 @dataclass(frozen=True)
@@ -60,6 +78,11 @@ _INTENT_ROUTES: Mapping[IntentType, Tuple[str, ...]] = {
     ),
     IntentType.PROJECT_SEARCH: (
         "project.search",
+    ),
+    IntentType.WORKSPACE_DIAGNOSTICS: (
+        "git.status",
+        "test.run",
+        "terminal.run",
     ),
     IntentType.BUG_FIX: (
         "project.search",
@@ -130,6 +153,17 @@ def _resolve_required_capabilities(
     ):
         return ("git.diff.cached",)
 
+    if (
+        analysis.intent is IntentType.WORKSPACE_DIAGNOSTICS
+        and interpretation is not None
+    ):
+        capabilities = ["git.status"]
+        if interpretation.run_tests:
+            capabilities.append("test.run")
+        if interpretation.run_compileall:
+            capabilities.append("terminal.run")
+        return tuple(capabilities)
+
     return required_capabilities
 
 
@@ -184,6 +218,9 @@ def plan_tools(
             "cannot build a tool plan for an unknown intent"
         )
 
+    if interpretation is None:
+        interpretation = interpret_task(analysis)
+
     required_capabilities = (
         _resolve_required_capabilities(
             analysis,
@@ -222,8 +259,47 @@ def plan_tools(
                 interpretation,
                 workspace=workspace,
             )
+            validate_tool_arguments(capability, arguments)
         except ToolArgumentError as exc:
-            raise ToolPlanningError(str(exc)) from exc
+            raise ToolPlanningError(
+                str(exc),
+                reason_code=exc.reason_code,
+                capability=capability,
+                candidate_tool=tool.name,
+                missing_field=exc.missing_field,
+            ) from exc
+
+        if interpretation is not None:
+            if (
+                not interpretation.allow_file_changes
+                and tool.permission in {"WRITE", "DELETE", "ADMIN"}
+            ):
+                raise ToolPlanningError(
+                    "plan violates the no-file-changes constraint",
+                    reason_code="constraint_violation",
+                    capability=capability,
+                    candidate_tool=tool.name,
+                )
+            if (
+                not interpretation.allow_network
+                and capability.startswith("network.")
+            ):
+                raise ToolPlanningError(
+                    "plan violates the no-network constraint",
+                    reason_code="constraint_violation",
+                    capability=capability,
+                    candidate_tool=tool.name,
+                )
+            if (
+                not interpretation.allow_dependency_installation
+                and capability.startswith("dependency.")
+            ):
+                raise ToolPlanningError(
+                    "plan violates the no-dependency-installation constraint",
+                    reason_code="constraint_violation",
+                    capability=capability,
+                    candidate_tool=tool.name,
+                )
 
         steps.append(
             ToolCallStep(

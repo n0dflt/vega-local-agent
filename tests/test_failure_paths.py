@@ -168,7 +168,9 @@ def test_planning_failure_is_stable_and_executes_nothing(
 
     assert result.reason == "routing_error"
     assert calls == []
-    assert result.message == "The request could not be planned safely."
+    assert result.message == (
+        "VEGA could not build a valid plan from registered tools."
+    )
     assert "TOP-SECRET" not in serialize_trace(result.execution_trace)
 
 

@@ -62,6 +62,7 @@ _REQUIRED_KEYS = frozenset(
 _KNOWN_INTENTS = frozenset(
     {
         "document_analysis",
+        "workspace_diagnostics",
         "project_search",
         "bug_fix",
         "test_run",

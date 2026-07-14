@@ -251,6 +251,9 @@ def _format_git_result(
     stderr = str(stderr or "").rstrip()
 
     if not stdout:
+        if tool_name == "git_status":
+            return "Git working tree is clean."
+
         if tool_name == "git_diff":
             return "No unstaged changes."
 
@@ -422,6 +425,7 @@ def format_step_result(
         return _format_read_file(step.data)
 
     if step.tool_name in {
+        "git_status",
         "git_diff",
         "git_diff_cached",
     }:
@@ -429,6 +433,12 @@ def format_step_result(
             step.tool_name,
             step.data,
         )
+
+    if step.tool_name == "test_run":
+        return "Test suite\n" + _format_generic(step.data)
+
+    if step.tool_name == "terminal_run":
+        return "Compile check\n" + _format_generic(step.data)
 
     if step.tool_name == "release_status":
         return _format_status_mapping(

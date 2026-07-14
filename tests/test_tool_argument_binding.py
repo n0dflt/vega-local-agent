@@ -7,6 +7,10 @@ from core.tool_planner import (
     ToolPlanningError,
     plan_tools,
 )
+from core.tool_argument_builder import (
+    ToolArgumentError,
+    validate_tool_arguments,
+)
 
 
 def _safe_catalog() -> tuple[ToolDescriptor, ...]:
@@ -176,3 +180,14 @@ def test_document_analysis_without_path_fails_closed() -> None:
             _safe_catalog(),
             interpretation=interpretation,
         )
+
+
+def test_document_read_none_is_rejected_by_argument_schema() -> None:
+    with pytest.raises(ToolArgumentError) as raised:
+        validate_tool_arguments(
+            "document.read",
+            {"path": None},
+        )
+
+    assert raised.value.reason_code == "missing_required_argument"
+    assert raised.value.missing_field == "path"

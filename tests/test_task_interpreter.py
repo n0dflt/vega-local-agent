@@ -109,3 +109,26 @@ def test_invalid_analysis_type_is_rejected() -> None:
         match="IntentAnalysis",
     ):
         interpret_task(None)  # type: ignore[arg-type]
+
+
+def test_workspace_diagnostics_preserves_machine_constraints() -> None:
+    analysis = analyze_intent(
+        "Проведи безопасную диагностику текущего проекта. Не изменяй "
+        "файлы, не устанавливай зависимости и не используй сеть. "
+        "Запусти pytest и python -m compileall, затем сделай отчёт."
+    )
+
+    result = interpret_task(analysis)
+
+    assert result.workspace == "current_workspace"
+    assert result.run_tests is True
+    assert result.run_compileall is True
+    assert result.allow_file_changes is False
+    assert result.allow_dependency_installation is False
+    assert result.allow_network is False
+    assert result.report_required is True
+    assert set(result.constraints) >= {
+        "read_only",
+        "no_dependency_installation",
+        "no_network",
+    }

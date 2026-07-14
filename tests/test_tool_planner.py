@@ -71,7 +71,7 @@ def test_project_search_uses_available_registered_tool() -> None:
     assert plan.metadata["intent"] == "project_search"
 
 
-def test_document_analysis_builds_read_plan() -> None:
+def test_document_analysis_without_source_is_rejected() -> None:
     analysis = analyze_intent(
         "\u041f\u0440\u043e\u0430\u043d\u0430"
         "\u043b\u0438\u0437\u0438\u0440\u0443\u0439 "
@@ -82,19 +82,11 @@ def test_document_analysis_builds_read_plan() -> None:
         "\u043e\u0442\u0447\u0451\u0442"
     )
 
-    plan = plan_tools(
-        analysis,
-        _tool_catalog(),
-    )
-
-    assert tuple(
-        step.tool_name
-        for step in plan.steps
-    ) == (
-        "documents.read",
-    )
-
-    assert plan.steps[0].depends_on == ()
+    with pytest.raises(
+        ToolPlanningError,
+        match="source path is required",
+    ):
+        plan_tools(analysis, _tool_catalog())
 
 
 def test_bug_fix_plan_preserves_permission_levels() -> None:
@@ -170,4 +162,7 @@ def test_planner_never_invents_tool_name() -> None:
 
     assert plan.steps[0].tool_name == "safe_test_executor"
     assert plan.steps[0].tool_name != "pytest"
-    assert plan.steps[0].arguments == {}
+    assert plan.steps[0].arguments == {
+        "group_id": "all",
+        "project_root": ".",
+    }

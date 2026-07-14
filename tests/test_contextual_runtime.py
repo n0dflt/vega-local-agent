@@ -280,7 +280,18 @@ def test_actionable_invalid_request_does_not_fall_back(
         ContextualRuntimeStatus.FAILED
     )
     assert result.handled is True
-    assert result.message == "The request could not be planned safely."
+    assert result.message == (
+        "VEGA rejected the generated plan because a required tool "
+        "argument was missing."
+    )
+    assert result.planning_diagnostics == {
+        "intent": "document_analysis",
+        "candidate_tool": "read_file",
+        "rejection_reason": "missing_required_argument",
+        "missing_field": "path",
+        "fallback_attempts": 0,
+        "final_planning_status": "failed",
+    }
 
 
 def test_document_analysis_synthesizes_real_read_content(tmp_path: Path) -> None:

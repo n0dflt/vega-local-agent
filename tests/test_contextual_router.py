@@ -223,3 +223,45 @@ def test_production_preview_uses_real_registry() -> None:
     )
     assert serialized["routing"]["policy_enabled"] is True
     assert serialized["routing"]["can_auto_execute"] is True
+
+
+def test_production_workspace_diagnostics_builds_bounded_confirmed_plan() -> None:
+    request = (
+        "Проведи безопасную диагностику текущего проекта. Не изменяй "
+        "файлы, не устанавливай зависимости и не используй сеть. "
+        "Проверь состояние проекта, запусти полный набор тестов и "
+        "python -m compileall, затем сформируй итоговый отчёт."
+    )
+
+    result = route_contextual_request(
+        request,
+        TOOL_REGISTRY,
+        ROOT / "config" / "tool_capabilities.json",
+        ROOT / "config" / "tool_routing_policy.json",
+        workspace=ROOT,
+        preview=True,
+    )
+
+    assert result.analysis.intent.value == "workspace_diagnostics"
+    assert tuple(step.tool_name for step in result.plan.steps) == (
+        "git_status",
+        "test_run",
+        "terminal_run",
+    )
+    assert tuple(step.required_permission for step in result.plan.steps) == (
+        "READ",
+        "EXECUTE",
+        "EXECUTE",
+    )
+    assert result.plan.steps[1].arguments == {
+        "group_id": "all",
+        "project_root": str(ROOT),
+    }
+    assert result.plan.steps[2].arguments == {
+        "command_id": "compile",
+        "project_root": str(ROOT),
+    }
+    assert result.requires_confirmation is True
+    assert result.interpretation.allow_file_changes is False
+    assert result.interpretation.allow_dependency_installation is False
+    assert result.interpretation.allow_network is False

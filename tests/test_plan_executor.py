@@ -15,6 +15,15 @@ from core.tool_executor import (
     ToolExecutionStatus,
     ToolExecutor,
 )
+from core.tool_confirmation import ToolConfirmationManager
+from permissions import (
+    PermissionCapability,
+    PermissionEffect,
+    PermissionEvaluator,
+    PermissionPolicy,
+    PermissionRisk,
+    PermissionRule,
+)
 
 
 def _plan(
@@ -430,6 +439,61 @@ def test_progress_events_follow_real_execution_once() -> None:
         ExecutionProgressStage.STEP_COMPLETED,
     ]
     assert all("arguments" not in repr(event) for event in events)
+
+
+def _confirmed_executor(registry) -> ToolExecutor:
+    rules = tuple(
+        PermissionRule(
+            name,
+            (PermissionCapability.PROCESS_EXECUTE,),
+            PermissionRisk.HIGH,
+            PermissionEffect.CONFIRM,
+            False,
+            "Runs a bounded diagnostic command.",
+        )
+        for name in registry
+    )
+    policy = PermissionPolicy(
+        1,
+        PermissionEffect.DENY,
+        "CONFIRM",
+        10,
+        rules,
+    )
+    return ToolExecutor(registry, PermissionEvaluator(policy))
+
+
+def test_confirmed_execute_steps_use_existing_one_time_confirmation() -> None:
+    calls: list[str] = []
+    prompts: list[str] = []
+    executor = _confirmed_executor(
+        {
+            "tests": lambda: calls.append("tests") or {"ok": True},
+            "compile": lambda: calls.append("compile") or {"ok": True},
+        }
+    )
+    plan = _plan(
+        ToolCallStep(1, "tests", required_permission="EXECUTE"),
+        ToolCallStep(
+            2,
+            "compile",
+            required_permission="EXECUTE",
+            depends_on=(1,),
+        ),
+    )
+
+    result = execute_plan(
+        plan,
+        executor,
+        confirmation_permissions=("EXECUTE",),
+        confirmation_manager=ToolConfirmationManager(
+            lambda prompt: prompts.append(prompt) or "yes"
+        ),
+    )
+
+    assert result.status is PlanExecutionStatus.COMPLETED
+    assert calls == ["tests", "compile"]
+    assert len(prompts) == 2
 
 
 def test_progress_callback_failure_never_repeats_tool() -> None:

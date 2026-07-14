@@ -26,6 +26,33 @@ from core.tool_planner import (
 class ContextualRoutingError(ValueError):
     """Raised when contextual routing cannot safely continue."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        intent: str = "",
+        candidate_tool: str = "",
+        reason_code: str = "routing_error",
+        missing_field: str = "",
+        fallback_attempts: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.intent = intent
+        self.candidate_tool = candidate_tool
+        self.reason_code = reason_code
+        self.missing_field = missing_field
+        self.fallback_attempts = fallback_attempts
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "intent": self.intent,
+            "candidate_tool": self.candidate_tool,
+            "rejection_reason": self.reason_code,
+            "missing_field": self.missing_field,
+            "fallback_attempts": self.fallback_attempts,
+            "final_planning_status": "failed",
+        }
+
 
 class ContextualRoutingDisabled(ContextualRoutingError):
     """Raised when contextual routing is disabled by policy."""
@@ -340,12 +367,20 @@ def route_contextual_request(
             workspace=str(workspace),
             max_steps=policy.max_tool_steps,
         )
-    except (
-        TaskInterpretationError,
-        ToolCatalogError,
-        ToolPlanningError,
-    ) as exc:
-        raise ContextualRoutingError(str(exc)) from exc
+    except ToolPlanningError as exc:
+        raise ContextualRoutingError(
+            str(exc),
+            intent=analysis.intent.value,
+            candidate_tool=exc.candidate_tool,
+            reason_code=exc.reason_code,
+            missing_field=exc.missing_field,
+            fallback_attempts=exc.fallback_attempts,
+        ) from exc
+    except (TaskInterpretationError, ToolCatalogError) as exc:
+        raise ContextualRoutingError(
+            str(exc),
+            intent=analysis.intent.value,
+        ) from exc
 
     requires_confirmation = plan.requires_confirmation(
         policy.automatic_permissions
