@@ -12,7 +12,7 @@ import time
 import uuid
 from contextlib import ExitStack
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, BinaryIO, Protocol
 
 from core.execution_trace import MAX_TRACE_CHARS, ExecutionTrace, TraceError
@@ -386,8 +386,9 @@ class StateIntegrityDiagnostics:
             candidate = Path(relative)
             if (
                 len(relative) > MAX_STATE_RELATIVE_PATH_CHARS
-                or candidate.is_absolute()
-                or candidate.drive
+                or PureWindowsPath(relative).is_absolute()
+                or PureWindowsPath(relative).drive
+                or PurePosixPath(relative).is_absolute()
                 or ".." in candidate.parts
             ):
                 raise ValueError("state integrity paths must be relative")

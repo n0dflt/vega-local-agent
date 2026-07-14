@@ -190,11 +190,17 @@ class CheckpointStore:
             if isinstance(value, str):
                 windows_path = PureWindowsPath(value)
                 posix_path = PurePosixPath(value)
-                if windows_path.is_absolute():
+                if os.name == "nt" and windows_path.is_absolute():
                     resolved = Path(value).resolve()
                     if not resolved.is_relative_to(self.project_root):
                         raise CheckpointStorageError("Workflow payload contains an external absolute path.")
-                elif posix_path.is_absolute():
+                elif os.name == "nt" and posix_path.is_absolute():
+                    raise CheckpointStorageError("Workflow payload contains an external absolute path.")
+                elif os.name != "nt" and posix_path.is_absolute():
+                    resolved = Path(value).resolve()
+                    if not resolved.is_relative_to(self.project_root):
+                        raise CheckpointStorageError("Workflow payload contains an external absolute path.")
+                elif os.name != "nt" and windows_path.is_absolute():
                     raise CheckpointStorageError("Workflow payload contains an external absolute path.")
 
         if not isinstance(payload, dict):

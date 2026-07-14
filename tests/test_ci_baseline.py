@@ -17,8 +17,8 @@ def test_ci_is_cross_platform_versioned_and_least_privilege() -> None:
     assert "windows-latest" in workflow
     for version in ('"3.12"', '"3.13"', '"3.14"'):
         assert version in workflow
-    assert "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5" in workflow
-    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in workflow
+    assert "actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd" in workflow
+    assert "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1" in workflow
     assert "persist-credentials: false" in workflow
     assert "secrets." not in workflow
 
