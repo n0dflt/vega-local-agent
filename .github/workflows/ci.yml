@@ -45,7 +45,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
       - name: Compile source and tests
-        run: python -m compileall -q core tools permissions plugins domains workflows planner memory rag scripts tests
+        run: python -m compileall -q core tools permissions plugins domains workflows planner memory rag review scripts tests ui web_demo
 
       - name: Run full suite
         run: python -m pytest -q -rs -p no:cacheprovider --basetemp .tmp/pytest-ci --tb=short
@@ -78,6 +78,11 @@ jobs:
           tests/test_execution_trace.py
           tests/test_runtime_diagnostics.py
           tests/test_state_integrity.py
+          tests/test_controlled_workflows.py
+          tests/test_controlled_workflow_security.py
+          tests/test_workflow_commands.py
+          tests/test_recovery_manager.py
+          tests/test_file_safety.py
           tests/test_release_consistency.py
 
       - name: Validate identity

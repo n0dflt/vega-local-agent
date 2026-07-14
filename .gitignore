@@ -25,6 +25,8 @@ data/project_state/tasks.json
 data/project_state/journal.jsonl
 data/workflows/active/*.json
 data/workflows/history/*.json
+data/workflows/active/*.tmp
+data/workflows/history/*.tmp
 !data/workflows/active/.gitkeep
 !data/workflows/history/.gitkeep
 
@@ -73,6 +75,7 @@ logs/diagnostics/.*.lock
 logs/diagnostics/*.tmp
 **/.trace-state.lock
 **/.report-state.lock
+**/.workflow-state.lock
 **/.quarantine-*.tmp
 
 # Runtime web audit logs

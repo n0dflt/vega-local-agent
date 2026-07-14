@@ -21,14 +21,19 @@ GENERATED_PARTS = (
     "logs/diagnostics/reports/",
     "logs/diagnostics/quarantine/",
     "data/index/",
+    "data/checkpoints/",
 )
-GENERATED_NAMES = frozenset({".trace-state.lock", ".report-state.lock"})
+GENERATED_NAMES = frozenset({".trace-state.lock", ".report-state.lock", ".workflow-state.lock"})
 IGNORE_PROBES = (
     "logs/diagnostics/.trace-state.lock",
     "logs/diagnostics/reports/.report-state.lock",
     "logs/diagnostics/quarantine/corrupt-trace-0000000000000000.jsonl",
     "logs/diagnostics/reports/.doctor-20260714T000000000000Z.json.deadbeef.tmp",
     "data/index/documents_index.json",
+    "data/workflows/active/workflow-00000000000000000000000000000000.json",
+    "data/workflows/history/.workflow-00000000000000000000000000000000.00000000000000000000000000000000.tmp",
+    "data/workflows/.workflow-state.lock",
+    "data/checkpoints/active/checkpoint-00000000000000000000000000000000.json",
 )
 
 
@@ -89,6 +94,10 @@ def main() -> int:
             if (
                 normalized in GENERATED_EXACT
                 or any(normalized.startswith(prefix) for prefix in GENERATED_PARTS)
+                or (
+                    normalized.startswith(("data/workflows/active/", "data/workflows/history/"))
+                    and Path(normalized).suffix in {".json", ".tmp"}
+                )
                 or Path(normalized).name in GENERATED_NAMES
             ):
                 unsafe.append(normalized)

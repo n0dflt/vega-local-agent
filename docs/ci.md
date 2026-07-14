@@ -12,6 +12,11 @@ focused critical tests, identity, production policy consistency, smoke test,
 repository hygiene, and the built-in Release Manager. Release Manager includes
 its own full-suite check, so it is not duplicated in every matrix cell.
 
+For v2.13 the focused set includes controlled lifecycle, confirmation binding,
+workflow persistence/security, recovery, exact CLI routing, portable path
+safety, execution traces, runtime diagnostics, v2.12 state integrity, and
+release identity. The full matrix remains the compatibility authority.
+
 Pytest uses `-rs`, so platform-conditional skips and their reasons are visible in
 every job. Windows symlink tests may skip when the runner lacks symlink
 privileges; other failures are not suppressed.
