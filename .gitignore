@@ -20,6 +20,7 @@ logs/sessions/
 data/index/
 
 # Local runtime state
+data/project_state/tasks.json
 data/project_state/journal.jsonl
 data/workflows/active/*.json
 data/workflows/history/*.json
@@ -55,6 +56,7 @@ data/model_profile.json
 data/documents/*
 !data/documents/example.md
 !data/documents/smoke_test.md
+!data/documents/vega_v031_test.md
 
 # Extra Python artifacts
 .Python
