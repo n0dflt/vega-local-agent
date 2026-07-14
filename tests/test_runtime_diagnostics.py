@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _policy_value(**overrides: object) -> dict[str, object]:
     value: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "trace_store_path": "logs/diagnostics/execution-traces.jsonl",
         "max_trace_file_bytes": 5 * 1024 * 1024,
         "retained_trace_backups": 3,
@@ -38,6 +38,10 @@ def _policy_value(**overrides: object) -> dict[str, object]:
         "doctor_reports_dir": "logs/diagnostics/reports",
         "max_doctor_report_bytes": 512 * 1024,
         "retained_doctor_reports": 3,
+        "lock_timeout_ms": 500,
+        "stale_temp_age_seconds": 3600,
+        "max_state_scan_files": 64,
+        "retained_quarantine_files": 10,
     }
     value.update(overrides)
     return value
@@ -76,7 +80,7 @@ def _report(root: Path, policy: DiagnosticsPolicy) -> RuntimeDiagnosticsReport:
 def test_repository_diagnostics_policy_loads() -> None:
     policy = load_diagnostics_policy(ROOT)
 
-    assert policy.schema_version == 1
+    assert policy.schema_version == 2
     assert policy.retained_trace_backups == 3
     assert policy.max_trace_file_bytes == 5 * 1024 * 1024
     assert policy.trace_store_path == "logs/diagnostics/execution-traces.jsonl"
@@ -85,16 +89,25 @@ def test_repository_diagnostics_policy_loads() -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     (
-        ("schema_version", 2),
+        ("schema_version", 1),
         ("trace_store_path", "../secret.jsonl"),
         ("trace_store_path", "C:/secret.jsonl"),
         ("trace_store_path", ".git/trace.jsonl"),
+        ("trace_store_path", ".venv/trace.jsonl"),
+        ("trace_store_path", "cache/trace.jsonl"),
+        ("trace_store_path", "node_modules/trace.jsonl"),
+        ("trace_store_path", "logs/" + "x" * 241),
         ("max_trace_file_bytes", 0),
         ("max_trace_file_bytes", 5 * 1024 * 1024 + 1),
         ("retained_trace_backups", -1),
         ("retained_trace_backups", 6),
         ("max_trace_records", True),
         ("retained_doctor_reports", 21),
+        ("lock_timeout_ms", True),
+        ("lock_timeout_ms", 5001),
+        ("stale_temp_age_seconds", 604801),
+        ("max_state_scan_files", 129),
+        ("retained_quarantine_files", 21),
     ),
 )
 def test_policy_rejects_unsafe_values(
@@ -178,6 +191,7 @@ def test_report_is_immutable_allowlisted_and_deterministic(tmp_path: Path) -> No
         "memory",
         "terminal_policy",
         "execution_traces",
+        "local_state",
         "runtime_files",
     }
     first = serialize_diagnostics_report(report)
