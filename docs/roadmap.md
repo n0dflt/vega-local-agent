@@ -5,13 +5,13 @@
 Current stable release:
 
 ```text
-v2.11.0 - Runtime Diagnostics Evolution
+v2.12.0 - Local State Integrity & Recovery
 ```
 
 Previous stable release:
 
 ```text
-v2.10.0 - Production Reliability and Execution Traces
+v2.11.0 - Runtime Diagnostics Evolution
 ```
 
 Previous extension API release:
@@ -26,9 +26,9 @@ Next planned release:
 TBD
 ```
 
-v2.11 is implemented and release-validated. It adds bounded local runtime
-diagnostics without autonomous execution, a marketplace, remote telemetry, or a
-new interface.
+v2.12 is implemented and release-validated. It adds bounded cross-process local
+state coordination and explicit recovery without autonomous execution, remote
+telemetry, background monitoring, or a new tool path.
 
 ## v0.1 — стабильная база
 
@@ -257,4 +257,22 @@ Implemented in `feature/v2.11-runtime-diagnostics`:
   identity.
 
 See [`docs/v2.11-architecture.md`](v2.11-architecture.md). The next release scope
+was v2.12 local-state integrity and recovery.
+
+## v2.12.0 release status
+
+Status: `implemented and release-validated`
+
+Implemented in `feature/v2.12-state-integrity-recovery`:
+
+* bounded Windows and POSIX interprocess state locks;
+* crash-safe trace/report persistence coordination;
+* read-only `/doctor state status` and explicit `/doctor state repair`;
+* torn-tail recovery, complete-corruption quarantine, stale-temp cleanup, and
+  bounded quarantine retention;
+* diagnostics policy schema version 2 and immutable local-state reporting; and
+* v2.10/v2.11 trace compatibility plus concurrency, security, and release
+  regressions.
+
+See [`docs/v2.12-architecture.md`](v2.12-architecture.md). The next release scope
 is `TBD`.

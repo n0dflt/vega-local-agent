@@ -113,8 +113,8 @@ def _rotating_writer(root: str, start: int, result: multiprocessing.Queue) -> No
 def _abandon_lock(root: str) -> None:
     project = Path(root)
     directory = project / "logs" / "diagnostics"
-    with GeneratedStateLock(project, directory, "trace", 1_000):
-        os._exit(0)
+    # Intentionally omit release; normal process termination must drop the OS lock.
+    GeneratedStateLock(project, directory, "trace", 1_000).acquire()
 
 
 def _spawn_context() -> multiprocessing.context.BaseContext:

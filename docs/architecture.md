@@ -152,7 +152,7 @@ VEGA не должна:
 <!-- VEGA DOCGEN START: architecture -->
 ## Generated project snapshot
 
-Project version: `v2.11.0`
+Project version: `v2.12.0`
 
 This section is generated from the current project tree.
 
@@ -413,3 +413,19 @@ scanned files and records, serialized report bytes, and retained reports. Trace
 rotation retains three backups by default and valid v2.10 records remain
 readable. `/doctor export` is explicit and atomic; no automatic or remote
 telemetry exists.
+
+## v2.12 local state integrity and recovery architecture
+
+The implemented v2.12 contract is documented in
+[`docs/v2.12-architecture.md`](v2.12-architecture.md). A dependency-free lock
+layer coordinates trace and report mutations across VEGA processes with fixed
+project-confined lock names and bounded acquisition. Windows uses byte-range
+locking; POSIX uses advisory `flock`.
+
+Read-only inspection classifies stale atomic-write files, incomplete JSONL tails,
+complete corruption, and quarantine state under hard scan limits. Repair is
+available only through the exact `/doctor state repair` command, rechecks state
+under locks, preserves valid trace records, quarantines ambiguous generated
+files, and never traverses arbitrary user paths. Diagnostics continue to observe
+the existing `contextual runtime -> plan execution -> PlanExecutor ->
+ToolExecutor` route without receiving tool authority.

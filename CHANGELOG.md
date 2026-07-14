@@ -4,6 +4,47 @@
 
 No unreleased changes.
 
+## v2.12.0 - Local State Integrity & Recovery
+
+Added:
+
+* Dependency-free Windows and POSIX interprocess file-lock adapters with fixed
+  lock names, project confinement, bounded timeouts, and safe failure codes.
+* Read-only `/doctor state status` and explicit `/doctor state repair` commands.
+* Bounded torn-tail recovery, stale atomic-temp cleanup, corruption quarantine,
+  and quarantine retention for generated traces and diagnostic reports.
+* Immutable, manually serialized local-state integrity diagnostics in runtime
+  reports and diagnostics policy schema version 2.
+
+Changed:
+
+* Trace append, threshold rotation, report export, and report retention now run
+  under process-local and interprocess coordination; writes flush and `fsync`.
+* A trace may reach the configured byte ceiling exactly and rotates before the
+  next record would exceed it. v2.10/v2.11 trace records remain readable.
+
+Security:
+
+* Repair accepts no paths, follows no generated-state symlinks, scans only fixed
+  names with hard caps, preserves valid trace records, and never runs at startup.
+* Complete corruption is copied or atomically moved to a confined quarantine;
+  incomplete final JSONL data is recoverable without exposing its payload.
+* Lock, scan, quarantine, repair, and serialization boundaries return only
+  allowlisted codes and never raw exceptions, paths, secrets, or trace content.
+
+Testing:
+
+* Added deterministic multiprocessing writers, contention, abandoned-lock,
+  adapter, failure-injection, rotation, temp cleanup, torn-tail, corruption,
+  quarantine, command-routing, compatibility, limit, and sentinel regressions.
+
+Known limitations:
+
+* Locks are advisory and coordinate VEGA processes; unrelated programs that
+  ignore them can still modify generated files. Repair is local and explicit,
+  and remote telemetry, background monitoring, and autonomous repair remain out
+  of scope.
+
 ## v2.11.0 - Runtime Diagnostics Evolution
 
 Added:

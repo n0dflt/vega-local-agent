@@ -7,8 +7,8 @@
     "docs/architecture.md",
     "docs/commands.md",
     "docs/security.md",
-    "docs/v2.11-architecture.md",
-    "docs/releases/v2.11.0.md",
+    "docs/v2.12-architecture.md",
+    "docs/releases/v2.12.0.md",
     "config/diagnostics_policy.json",
     "config/release_policy.json"
   ],

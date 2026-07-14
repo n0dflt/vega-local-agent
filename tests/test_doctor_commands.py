@@ -41,6 +41,8 @@ def test_doctor_help_lists_exact_commands(tmp_path: Path, capsys) -> None:
         "/doctor trace status",
         "/doctor trace latest",
         "/doctor trace summary",
+        "/doctor state status",
+        "/doctor state repair",
         "/doctor export",
     ):
         assert command in output

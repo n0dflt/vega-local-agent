@@ -10,7 +10,7 @@ gates.
 ## Current version
 
 ```text
-v2.11.0 - Runtime Diagnostics Evolution
+v2.12.0 - Local State Integrity & Recovery
 ```
 
 The previous stable release is:
@@ -953,3 +953,18 @@ credentials, absolute user paths, raw exceptions, or tracebacks. Locking remains
 process-local rather than interprocess-safe. See the
 [v2.11 architecture](docs/v2.11-architecture.md) and
 [v2.11.0 release notes](docs/releases/v2.11.0.md).
+
+## VEGA v2.12.0 - Local State Integrity & Recovery
+
+VEGA v2.12 coordinates trace and diagnostic-report mutations across processes
+with bounded Windows and POSIX file locks. Interrupted JSONL tails can be
+recovered explicitly, complete corruption is quarantined, and recognized stale
+atomic-write files are cleaned without touching unrelated project files.
+
+Use `/doctor state status` for a read-only bounded view and
+`/doctor state repair` for the only explicit repair path. Trace persistence
+remains opt-in, diagnostics remain local observer-only state, and the supported
+execution route through `PlanExecutor` and `ToolExecutor` is unchanged.
+
+See the [v2.12 architecture](docs/v2.12-architecture.md) and
+[v2.12.0 release notes](docs/releases/v2.12.0.md).

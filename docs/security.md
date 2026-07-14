@@ -92,7 +92,7 @@ enforcement.
 <!-- VEGA DOCGEN START: security -->
 ## Generated security snapshot
 
-Project version: `v2.11.0`
+Project version: `v2.12.0`
 
 ### Documentation Builder policy
 
@@ -135,7 +135,7 @@ Project version: `v2.11.0`
 
 ## Runtime diagnostics security
 
-v2.11 diagnostics are local-only observers. Trace persistence remains opt-in and
+v2.12 diagnostics are local-only observers. Trace persistence remains opt-in and
 reports are created only by explicit `/doctor export`; remote telemetry is
 absent. Diagnostics never invoke tools, models, networks, or shell commands and
 never change permissions, routing, synthesis, or request results.
@@ -161,8 +161,24 @@ codes. The fixed vocabulary includes `diagnostics_policy_error`,
 `diagnostics_build_failed`, `diagnostics_serialization_failed`,
 `diagnostics_export_failed`, `diagnostics_report_too_large`,
 `diagnostics_retention_failed`, `trace_store_unavailable`,
-`trace_record_invalid`, and `trace_scan_limit_reached`. Trace locking is
-process-local only and is not interprocess locking.
+`trace_record_invalid`, `trace_scan_limit_reached`, `state_lock_unavailable`,
+`state_lock_timeout`, `state_lock_operation_failed`, `stale_temporary_state`,
+`recovered_torn_trace_tail`, `corrupt_generated_state`, `quarantine_failed`, and
+`state_repair_failed`.
+
+Trace and report mutations retain bounded in-process synchronization and add
+advisory interprocess locks on Windows and POSIX. Lock names are fixed and live
+inside validated generated-state directories. Acquisition never waits longer
+than the configured hard-capped timeout; exceptions and abandoned processes
+release operating-system locks. Symlinked locks and generated directories fail
+closed.
+
+State repair is never automatic. The exact `/doctor state repair` command scans
+only recognized trace, report, temp, and quarantine names; preserves valid trace
+records; removes only stale recognized temporary files; and quarantines complete
+corruption. All file, line, record, traversal, cleanup, retention, and lock work
+is bounded. Advisory locks cannot protect against unrelated software that
+ignores the protocol.
 
 ## Agent Orchestrator security
 

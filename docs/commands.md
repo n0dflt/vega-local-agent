@@ -72,12 +72,17 @@ Git Tools in v1.4.0 are read-only. Commit, tag, push, pull, checkout, reset, mer
 /doctor trace status
 /doctor trace latest
 /doctor trace summary
+/doctor state status
+/doctor state repair
 /doctor export
 ```
 
 `/doctor` shows a compact payload-free runtime summary. Trace commands read only
-the bounded local trace store. `/doctor export` is the only command that creates
-a report; it accepts no path argument and prints a relative path such as:
+the bounded local trace store. `/doctor state status` is read-only and reports
+only allowlisted metadata. `/doctor state repair` accepts no arguments and is the
+only repair path; it mutates only recognized generated VEGA state under bounded
+locks. `/doctor export` is the only command that creates a report; it accepts no
+path argument and prints a relative path such as:
 
 ```text
 Diagnostics report exported: logs/diagnostics/reports/doctor-20260714T120000000000Z.json
@@ -89,7 +94,7 @@ file. No doctor output includes an absolute project path.
 <!-- VEGA DOCGEN START: commands -->
 ## Generated command reference
 
-Project version: `v2.11.0`
+Project version: `v2.12.0`
 
 This section is generated from `scripts/vega.py`.
 
