@@ -10,13 +10,13 @@ gates.
 ## Current version
 
 ```text
-v2.12.1 - Local State Integrity & Recovery Stabilization
+v2.13.0 - Controlled Coding Workflows
 ```
 
 The previous stable release is:
 
 ```text
-v2.10.0 - Production Reliability and Execution Traces
+v2.12.1 - Local State Integrity & Recovery Stabilization
 ```
 
 ## Project status
@@ -953,6 +953,26 @@ credentials, absolute user paths, raw exceptions, or tracebacks. Locking remains
 process-local rather than interprocess-safe. See the
 [v2.11 architecture](docs/v2.11-architecture.md) and
 [v2.11.0 release notes](docs/releases/v2.11.0.md).
+
+## VEGA v2.13.0 - Controlled Coding Workflows
+
+v2.13 turns VEGA's existing workflow, Patch Tools, Test Tools, permission,
+checkpoint, trace, and v2.12 state-integrity layers into one deterministic
+coding workflow. Read-only investigation may proceed automatically. Patch
+application and test execution require separate confirmations bound to the
+workflow, stage, patch identity, workspace revision, and configured test group.
+
+The supported workflow types are `bug-fix` (`bugfix` remains an alias),
+`feature`, `refactor`, `test`, and read-only `review`. Workflow state persists
+only bounded allowlisted metadata; raw tasks, diffs, file contents, test output,
+tool results, exception text, and confirmation tokens are excluded. Test-fix
+work is capped at three explicitly confirmed iterations. Resume never silently
+replays an interrupted action, and rollback refuses when unrelated workspace
+changes make restoration unsafe.
+
+See the [v2.13 architecture](docs/v2.13-architecture.md),
+[workflow commands](docs/commands.md), and
+[v2.13.0 release notes](docs/releases/v2.13.0.md).
 
 ## VEGA v2.12.0 - Local State Integrity & Recovery
 

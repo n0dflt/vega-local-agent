@@ -89,10 +89,36 @@ checks remain mandatory in every mode.
 Mode instructions added to the model context do not replace command-level safety
 enforcement.
 
+## Controlled workflow security
+
+v2.13 workflow approvals are deterministic single-use bindings over workflow,
+stage, action, managed patch identity, workspace revision, test group, command,
+and state revision. Patch approval cannot authorize tests; model output,
+ordinary language, silence, prior patch creation, and another workflow cannot
+authorize any action.
+
+Workflow paths apply Windows and POSIX absolute, drive, UNC, parent traversal,
+root confinement, symlink, sensitive-file, `.git`, generated-state, cache,
+virtual-environment, and `node_modules` controls. Patch metadata and workspace
+revision are revalidated immediately before action. Rollback refuses after any
+unrelated change.
+
+Schema-v2 workflow state, doctor data, and workflow traces contain only bounded
+allowlisted metadata. Raw tasks, prompts, conversation, patches, file content,
+test output, stdout/stderr, arguments/results, exception text, tracebacks,
+absolute paths, environment values, tokens, credentials, confirmation material,
+callables, and arbitrary representations are prohibited. Unknown, corrupt,
+oversized, incompatible, symlinked, or ambiguous state fails closed.
+
+The model is never given handlers, the registry, permission evaluators,
+confirmation material, arbitrary shell, automatic internet, Git-write, plugin
+installation, or publication authority. See
+[`v2.13-architecture.md`](v2.13-architecture.md) for the full threat model.
+
 <!-- VEGA DOCGEN START: security -->
 ## Generated security snapshot
 
-Project version: `v2.12.1`
+Project version: `v2.13.0`
 
 ### Documentation Builder policy
 

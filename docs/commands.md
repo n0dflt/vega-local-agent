@@ -64,6 +64,38 @@ Safe read-only Git access:
 
 Git Tools in v1.4.0 are read-only. Commit, tag, push, pull, checkout, reset, merge, rebase, configuration changes, and arbitrary Git command execution are unavailable.
 
+## /workflow commands
+
+```text
+/workflow types
+/workflow list
+/workflow start bug-fix <task>
+/workflow start feature <task>
+/workflow start refactor <task>
+/workflow start test <allowlisted-group>
+/workflow start review <unstaged|staged>
+/workflow attach-patch <pending_patch_id> [test-group]
+/workflow approve patch <workflow_id>
+/workflow approve tests <workflow_id>
+/workflow status [workflow_id]
+/workflow show <workflow_id>
+/workflow resume [workflow_id]
+/workflow cancel [workflow_id]
+/workflow rollback <workflow_id>
+/workflow history
+/workflow review
+```
+
+Routing is exact and case-sensitive. Patch and tests require different
+single-use bindings; an approval for one action never authorizes the next.
+`test` accepts only configured groups, and a focused group never expands to the
+full suite. `review` accepts only `unstaged` or `staged` and is read-only.
+
+Status and details expose bounded IDs, stages, next actions, iteration count,
+drift and rollback flags, and safe codes. They do not print raw tasks, diffs,
+test output, exceptions, tokens, or absolute paths. See
+[`coding_workflows.md`](coding_workflows.md) for lifecycle and recovery behavior.
+
 ## /doctor commands
 
 ```text
@@ -94,7 +126,7 @@ file. No doctor output includes an absolute project path.
 <!-- VEGA DOCGEN START: commands -->
 ## Generated command reference
 
-Project version: `v2.12.1`
+Project version: `v2.13.0`
 
 This section is generated from `scripts/vega.py`.
 

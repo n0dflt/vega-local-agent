@@ -4,6 +4,51 @@
 
 No unreleased changes.
 
+## v2.13.0 - Controlled Coding Workflows
+
+Added:
+
+* Deterministic `bug-fix`, `feature`, `refactor`, allowlisted `test`, and
+  read-only staged/unstaged `review` workflows with stable IDs, explicit stages,
+  safe next actions, status, detail, history, cancellation, resume, and rollback.
+* Separate single-use confirmation bindings for patch application and test
+  execution, tied to workflow, stage, action, patch identity, workspace
+  revision, test group, command ID, and state revision.
+* Frozen slotted schema-v2 workflow state with manual allowlisted serialization,
+  atomic replace, `fsync`, bounded interprocess locking, strict migration, and
+  checkpoint/recovery compatibility.
+* Payload-free workflow decisions in opt-in execution traces and read-only
+  workflow state in runtime diagnostics.
+
+Changed:
+
+* Failed focused tests preserve applied patch evidence, structured outcomes,
+  rollback availability, and safe next actions for at most three separately
+  confirmed repair iterations.
+* File and patch path validation now applies Windows and POSIX absolute-path,
+  drive, traversal, protected-state, cache, virtual-environment, and symlink
+  rules consistently.
+* The CI release gate includes focused workflow lifecycle, security, recovery,
+  command, and path-safety regressions.
+
+Security:
+
+* The model receives no callable handlers, registry, permission evaluator,
+  confirmation material, shell authority, or direct tool path. Ordinary prose
+  and model output cannot approve or advance dangerous workflow stages.
+* Workflow persistence, diagnostics, and traces exclude raw task text, prompts,
+  diffs, file or patch contents, test output, stdout/stderr, arguments/results,
+  exception text, absolute paths, environment values, tokens, and secrets.
+* Drift, changed patch identity, replay, wrong workflow, missing configuration,
+  lock timeout, corrupt/oversized/incompatible state, interrupted actions, and
+  unsafe rollback fail closed with fixed codes.
+
+Compatibility:
+
+* Ordinary chat, manual Patch/Test commands, public trace APIs, v2.10/v2.11
+  traces, v2.12 diagnostics/repair, release tooling, and safely migratable v1
+  workflow state remain supported.
+
 ## v2.12.1 - Local State Integrity Stabilization
 
 Fixed:

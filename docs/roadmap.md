@@ -5,13 +5,13 @@
 Current stable release:
 
 ```text
-v2.12.1 - Local State Integrity & Recovery Stabilization
+v2.13.0 - Controlled Coding Workflows
 ```
 
 Previous stable release:
 
 ```text
-v2.11.0 - Runtime Diagnostics Evolution
+v2.12.1 - Local State Integrity & Recovery Stabilization
 ```
 
 Previous extension API release:
@@ -26,9 +26,9 @@ Next planned release:
 TBD
 ```
 
-v2.12 is implemented and release-validated. It adds bounded cross-process local
-state coordination and explicit recovery without autonomous execution, remote
-telemetry, background monitoring, or a new tool path.
+v2.13 is implemented and release-validated. It adds deterministic controlled
+coding, test, and review workflows without autonomous execution, direct model
+tools, arbitrary shell, remote telemetry, background work, or publication.
 
 ## v0.1 — стабильная база
 
@@ -274,8 +274,7 @@ Implemented in `feature/v2.12-state-integrity-recovery`:
 * v2.10/v2.11 trace compatibility plus concurrency, security, and release
   regressions.
 
-See [`docs/v2.12-architecture.md`](v2.12-architecture.md). The next release scope
-is `TBD`.
+See [`docs/v2.12-architecture.md`](v2.12-architecture.md).
 
 ## v2.12.1 stabilization status
 
@@ -286,3 +285,24 @@ bounded reads, report classification, quarantine substitution, and failure-code
 accuracy, and establishes Windows/Linux CI for Python 3.12–3.14. Product
 execution and trace APIs remain unchanged. v2.13 Controlled Coding Workflows is
 the next release scope.
+
+## v2.13.0 release status
+
+Status: `implemented and release-validated`
+
+Implemented in `feature/v2.13-controlled-coding-workflows`:
+
+* one controlled lifecycle for bug-fix, feature, refactor, allowlisted test, and
+  read-only staged/unstaged review requests;
+* exact single-use patch/test confirmation bindings with workspace and patch
+  identity validation;
+* frozen schema-v2 metadata-only workflow state, atomic locked persistence,
+  checkpoints, recovery, restart reconciliation, migration, cancellation, and
+  conservative rollback;
+* three-iteration maximum with every patch and test separately confirmed;
+* payload-free workflow doctor diagnostics and optional trace decisions; and
+* exact CLI, path, corruption, concurrency, interruption, failure-injection,
+  rollback, compatibility, release, Windows, and POSIX coverage.
+
+See [`docs/v2.13-architecture.md`](v2.13-architecture.md). The next release scope
+is `TBD`.

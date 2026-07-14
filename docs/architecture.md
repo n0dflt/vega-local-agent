@@ -149,10 +149,33 @@ VEGA не должна:
 - добавлять GUI раньше стабильной базы;
 - соглашаться с плохой идеей только ради вежливости.
 
+## Controlled coding workflow layer
+
+VEGA v2.13.0 composes the existing deterministic workflow registry, Patch
+Tools, Test Tools, permission policy, checkpoints, execution traces, doctor
+diagnostics, and v2.12 state lock. It does not create a second registry or a
+model-to-tool path.
+
+```text
+exact CLI or deterministic intent
+    -> controlled WorkflowEngine
+        -> bounded read-only investigation
+        -> managed Patch Tools metadata
+        -> PermissionEvaluator and exact patch binding
+        -> Patch Tools apply once
+        -> new exact test binding
+        -> allowlisted Test Tools group once
+        -> bounded outcome and archived state
+```
+
+The lifecycle, transition table, persistence contract, confirmation binding,
+migration rules, threat model, and limitations are maintained in
+[`docs/v2.13-architecture.md`](v2.13-architecture.md).
+
 <!-- VEGA DOCGEN START: architecture -->
 ## Generated project snapshot
 
-Project version: `v2.12.1`
+Project version: `v2.13.0`
 
 This section is generated from the current project tree.
 

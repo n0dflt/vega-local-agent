@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_identity_is_synchronized() -> None:
-    assert VERSION == "v2.12.1"
+    assert VERSION == "v2.13.0"
     assert BANNER_VERSION == VERSION
 
     for relative in (
@@ -24,11 +24,11 @@ def test_release_identity_is_synchronized() -> None:
         "docs/commands.md",
         "docs/security.md",
         "docs/roadmap.md",
-        "docs/v2.12-architecture.md",
-        "docs/releases/v2.12.1.md",
+        "docs/v2.13-architecture.md",
+        "docs/releases/v2.13.0.md",
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
-        assert "v2.12.1" in text, relative
+        assert "v2.13.0" in text, relative
 
 
 def test_required_architecture_and_release_notes_exist() -> None:
@@ -36,11 +36,11 @@ def test_required_architecture_and_release_notes_exist() -> None:
         (ROOT / "config" / "release_policy.json").read_text(encoding="utf-8")
     )
 
-    assert "docs/releases/v2.12.1.md" in policy["required_files"]
-    assert "docs/v2.12-architecture.md" in policy["required_files"]
+    assert "docs/releases/v2.13.0.md" in policy["required_files"]
+    assert "docs/v2.13-architecture.md" in policy["required_files"]
     assert "config/diagnostics_policy.json" in policy["required_files"]
-    assert (ROOT / "docs" / "v2.12-architecture.md").is_file()
-    assert (ROOT / "docs" / "releases" / "v2.12.1.md").is_file()
+    assert (ROOT / "docs" / "v2.13-architecture.md").is_file()
+    assert (ROOT / "docs" / "releases" / "v2.13.0.md").is_file()
 
 
 def test_release_policy_forbids_automatic_publication() -> None:
@@ -109,6 +109,10 @@ def test_mutable_runtime_state_is_not_tracked() -> None:
             "logs/diagnostics/reports/.report-state.lock",
             "logs/diagnostics/quarantine/corrupt-trace-0000000000000000.jsonl",
             "logs/diagnostics/reports/.doctor-20260714T000000000000Z.json.deadbeef.tmp",
+            "data/workflows/active/workflow-00000000000000000000000000000000.json",
+            "data/workflows/history/workflow-00000000000000000000000000000000.json",
+            "data/workflows/.workflow-state.lock",
+            "data/checkpoints/active/checkpoint-00000000000000000000000000000000.json",
         ],
         cwd=ROOT,
         capture_output=True,
@@ -131,8 +135,8 @@ def test_release_documents_contain_no_known_mojibake() -> None:
         "RELEASE_NOTES.md",
         "docs/architecture.md",
         "docs/roadmap.md",
-        "docs/v2.12-architecture.md",
-        "docs/releases/v2.12.1.md",
+        "docs/v2.13-architecture.md",
+        "docs/releases/v2.13.0.md",
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert all(marker not in text for marker in markers), relative
