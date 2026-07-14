@@ -10,13 +10,13 @@ gates.
 ## Current version
 
 ```text
-v2.7.2 - UTF-8 Documentation Fix
+v2.10.0 - Production Reliability and Execution Traces
 ```
 
-The latest functional feature release is:
+The previous functional release is:
 
 ```text
-v2.7.0 - Context-Aware Tool Orchestration
+v2.9.0 - Model Selection and Context Optimization
 ```
 
 ## Project status
@@ -50,6 +50,9 @@ VEGA is not currently presented as a production-ready autonomous agent.
 * Workflow checkpoints and recovery
 * Fail-closed tool permissions
 * Context-aware natural-language tool routing
+* Validated cross-layer production runtime snapshot
+* Deterministic model selection and bounded synthesis context
+* Opt-in bounded and redacted local execution diagnostics
 
 ## Safety model
 
@@ -85,7 +88,7 @@ Copyright 2026 n0dflt.
 ## Requirements
 
 * Windows
-* Python 3.14+
+* Python 3.12+
 * Ollama
 * Recommended local Ollama model: qwen2.5-coder:14b
 
@@ -188,7 +191,7 @@ python scripts\vega.py
 /q
 ```
 
-## VEGA v1.2.0 вЂ” Safe File Tools
+## VEGA v1.2.0 — Safe File Tools
 
 VEGA provides read-only tools for listing project directories, reading bounded UTF-8
 text files, finding files, searching text, and creating deterministic file summaries.
@@ -891,3 +894,41 @@ The supported production plugin execution path is
 the existing `ToolExecutor`. The Plugin API is not a sandbox: trusted Python
 code can still call a handler directly. Permission and contextual-routing
 configuration files are never modified automatically.
+
+## VEGA v2.9.0 - Model Selection and Context Optimization
+
+VEGA maps supported contextual intents to validated model profiles, preserves
+manual profile selection, falls back only to installed models, and applies
+per-profile context budgets before optional evidence synthesis. A missing or
+failing model never reruns a tool or discards a successful deterministic tool
+result.
+
+## VEGA v2.10.0 - Production Reliability and Execution Traces
+
+VEGA v2.10 composes routing metadata, domains, tools, plugin activation,
+permissions, model profiles, and context budgets into one immutable validated
+production snapshot. Fatal configuration drift blocks tool execution before a
+normal handler is published. The supported execution path remains:
+
+```text
+contextual runtime -> execute_plan() -> PlanExecutor -> ToolExecutor
+```
+
+Execution traces observe that path without invoking tools themselves. A trace
+contains only bounded machine decisions and stable codes; it excludes request
+text, prompts, evidence, arguments, results, payloads, handlers, callbacks,
+tokens, grants, environment values, secrets, full local paths, URL query
+parameters, and raw exceptions.
+
+Persistence is disabled by default. Set `VEGA_EXECUTION_TRACE` to `1`, `true`,
+`yes`, or `on` to append UTF-8 JSONL to
+`logs/diagnostics/execution-traces.jsonl`. The active file is limited to 5 MiB
+and retains one `.1` backup. Locking is process-local only; v2.10 does not claim
+interprocess-safe appends. `/doctor trace latest` prints only a safe allowlisted
+summary.
+
+Mutable model-profile and task state is local, ignored, and untracked. Model
+profile writes use atomic replacement. Failure paths return stable safe
+messages/codes, and failed synthesis preserves the completed deterministic
+response. See [v2.10.0 release notes](docs/releases/v2.10.0.md) for migration
+impact and known limitations.

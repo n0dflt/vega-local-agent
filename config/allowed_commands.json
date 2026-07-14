@@ -21,9 +21,15 @@
         "-m",
         "compileall",
         "core",
-        "scripts",
         "tools",
+        "permissions",
+        "plugins",
+        "domains",
+        "workflows",
+        "planner",
         "memory",
+        "rag",
+        "scripts",
         "tests"
       ],
       "timeout_seconds": 120,
@@ -37,6 +43,10 @@
         "-m",
         "pytest",
         "-q",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp",
+        ".tmp/pytest-release",
         "--tb=short"
       ],
       "timeout_seconds": 180,
@@ -101,6 +111,16 @@
       "argv": [
         "python",
         "scripts\\check_identity.py"
+      ],
+      "timeout_seconds": 30,
+      "enabled": true
+    },
+    {
+      "id": "policy-consistency",
+      "description": "Validate the production cross-layer policy snapshot.",
+      "argv": [
+        "python",
+        "scripts\\check_policy_consistency.py"
       ],
       "timeout_seconds": 30,
       "enabled": true

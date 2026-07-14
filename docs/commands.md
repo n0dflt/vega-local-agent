@@ -67,7 +67,7 @@ Git Tools in v1.4.0 are read-only. Commit, tag, push, pull, checkout, reset, mer
 <!-- VEGA DOCGEN START: commands -->
 ## Generated command reference
 
-Project version: `v2.2.0`
+Project version: `v2.10.0`
 
 This section is generated from `scripts/vega.py`.
 

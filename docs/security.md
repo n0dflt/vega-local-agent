@@ -92,7 +92,7 @@ enforcement.
 <!-- VEGA DOCGEN START: security -->
 ## Generated security snapshot
 
-Project version: `v2.1.0`
+Project version: `v2.10.0`
 
 ### Documentation Builder policy
 

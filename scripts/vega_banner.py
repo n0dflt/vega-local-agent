@@ -3,9 +3,7 @@ from dataclasses import dataclass
 try:
     from version import APP_NAME, APP_SUBTITLE, VERSION
 except ImportError:
-    VERSION = "v1.0.0"
-    APP_NAME = "VEGA"
-    APP_SUBTITLE = "Local Project Coding-Agent"
+    from scripts.version import APP_NAME, APP_SUBTITLE, VERSION
 
 
 @dataclass

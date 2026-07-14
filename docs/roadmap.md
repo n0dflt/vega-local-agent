@@ -5,30 +5,29 @@
 Current stable release:
 
 ```text
-v2.7.2 - UTF-8 Documentation Fix
+v2.10.0 - Production Reliability and Execution Traces
 ```
 
-Latest functional release:
+Previous functional release:
 
 ```text
-v2.7.0 - Context-Aware Tool Orchestration
+v2.9.0 - Model Selection and Context Optimization
 ```
 
-Previous documentation and licensing release:
-
-```text
-v2.7.1 - Documentation and Licensing Patch
-```
-
-Next planned release:
+Previous extension API release:
 
 ```text
 v2.8.0 - Plugin and Domain API
 ```
 
-The v2.7.2 hotfix restores valid UTF-8 documentation after the v2.7.1
-PowerShell editing process corrupted Cyrillic text. Runtime behavior,
-permissions, workflows, tool routing, and execution policies are unchanged.
+Next planned stabilization:
+
+```text
+v2.11.0 - Runtime Diagnostics Evolution
+```
+
+v2.10 completes the cross-layer reliability plan without adding autonomous
+execution, a marketplace, telemetry export, or a new interface.
 
 ## v0.1 — стабильная база
 
@@ -164,7 +163,7 @@ Next stage: `v2.8.0 - Plugin and Domain API`.
 
 ## v2.8.0 release status
 
-Status: `implementation in progress`
+Status: `completed in v2.8.0`
 
 Implemented scope:
 
@@ -205,12 +204,11 @@ Implemented in tag `v2.9.0`:
 * per-profile context budgets; and
 * bounded evidence synthesis with deterministic fallback.
 
-Release identity documentation still requires reconciliation before the next
-release and is part of the v2.10 plan.
+The v2.9 tag remains the model/context baseline consumed by v2.10.
 
-## v2.10.0 planned stabilization
+## v2.10.0 release status
 
-Status: `snapshot gate and execution traces implemented; remaining stabilization planned`
+Status: `implemented and release-validated`
 
 Implemented in `feature/v2.10-runtime-snapshot-gate`:
 
@@ -228,7 +226,7 @@ Implemented in `feature/v2.10-execution-traces`:
 * payload-free contextual and plan-execution hooks; and
 * safe `/doctor` trace availability and latest-summary diagnostics.
 
-Remaining planned scope:
+Completed stabilization scope:
 
 * cross-layer validation of intents, domains, capabilities, tools, plugins,
   permissions, model profiles, budgets, and policy schema versions;
@@ -240,3 +238,5 @@ Remaining planned scope:
 The executable design and acceptance criteria are in
 [`docs/v2.10-architecture.md`](v2.10-architecture.md). v2.10 does not add GUI,
 monitoring, autonomous tool execution, a marketplace, or automatic publishing.
+Confirmation-only `bug_fix` and `test_run` routes remain intentionally outside
+the automatic contextual catalog and are reported as nonblocking warnings.

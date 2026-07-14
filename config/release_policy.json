@@ -7,6 +7,7 @@
     "docs/architecture.md",
     "docs/commands.md",
     "docs/security.md",
+    "docs/releases/v2.10.0.md",
     "config/release_policy.json"
   ],
   "branch_policy": {
@@ -23,6 +24,7 @@
     "documentation": true,
     "commands": [
       "identity",
+      "policy-consistency",
       "compile",
       "tests"
     ]

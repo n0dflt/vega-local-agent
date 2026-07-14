@@ -2,6 +2,77 @@
 
 ## Unreleased
 
+No unreleased changes.
+
+## v2.10.0 - Production Reliability and Execution Traces
+
+Added:
+
+* One immutable validated production snapshot spanning domains, intents,
+  capabilities, tools, plugins, permissions, routing, model profiles, and
+  context budgets.
+* Bounded, redacted execution traces with a manual allowlist serializer,
+  request-local recorder, immutable terminal lifecycle, and stable diagnostic
+  reason/error codes.
+* Opt-in UTF-8 JSONL diagnostics at
+  `logs/diagnostics/execution-traces.jsonl`, with a 5 MiB active-file limit and
+  exactly one `.1` backup.
+* Safe `/doctor trace latest` diagnostics and release-time production policy
+  consistency validation.
+* End-to-end failure, cross-layer routing, runtime cleanup, persistence,
+  rotation, release identity, and security regression tests.
+
+Changed:
+
+* Production startup and contextual routing use the same validated snapshot and
+  the existing permission-enforced `ToolExecutor` path.
+* Mutable model-profile and task state is ignored and untracked; profile writes
+  use same-directory atomic replacement and preserve the previous file when
+  replacement fails.
+* Routing and model policy files now require strict `schema_version: 1`.
+* Explicit model overrides are considered available only when present in the
+  installed-model set.
+* Model, planning, tool, permission, synthesis, trace, and snapshot failures now
+  produce stable safe codes/messages without exposing raw exception text.
+* Runtime, CLI, documentation, and release identity are synchronized to
+  `v2.10.0`.
+
+Security:
+
+* Traces never contain raw request text, prompts, evidence, tool arguments or
+  results, payloads, handlers, callbacks, confirmation tokens, permission
+  grants, environment values, secrets, full local paths, URL query parameters,
+  exception objects/text, or tracebacks.
+* Trace persistence is disabled by default; serialization, callback, directory,
+  append, and rotation failures cannot change the execution result.
+* Observer metadata is sanitized before callbacks, and tracing never creates a
+  second tool-execution path or retries a tool.
+* Confirmation-only `bug_fix` and `test_run` routes remain outside the automatic
+  contextual catalog and are reported as nonblocking policy warnings.
+
+## v2.9.0 - Model Selection and Context Optimization
+
+Added:
+
+* Deterministic intent-based model-profile selection with manual-mode
+  preservation and installed-model fallback.
+* Per-profile context budgets with deterministic head/tail evidence selection.
+* Bounded evidence synthesis for supported completed read-only requests.
+
+Changed:
+
+* Unavailable or failing synthesis preserves the successful deterministic tool
+  response without retrying tool execution.
+* Oversized evidence is copied into a bounded synthesis context without
+  mutating the original execution result.
+
+Security:
+
+* The model receives bounded evidence but no executor, registry, callable,
+  permission object, or confirmation token.
+
+## v2.8.0 - Plugin and Domain API
+
 Added:
 
 * Immutable domain definitions and deterministic, independent domain registries.

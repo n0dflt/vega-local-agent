@@ -152,7 +152,7 @@ VEGA не должна:
 <!-- VEGA DOCGEN START: architecture -->
 ## Generated project snapshot
 
-Project version: `v2.2.0`
+Project version: `v2.10.0`
 
 This section is generated from the current project tree.
 
@@ -162,12 +162,16 @@ This section is generated from the current project tree.
 - `core/`
 - `data/`
 - `docs/`
+- `domains/`
 - `logs/`
 - `memory/`
 - `ollama/`
+- `permissions/`
 - `planner/`
+- `plugins/`
 - `prompts/`
 - `rag/`
+- `review/`
 - `scripts/`
 - `tests/`
 - `tools/`
@@ -179,9 +183,14 @@ This section is generated from the current project tree.
 
 - `core/agent_modes.py`
 - `core/command_handler.py`
+- `core/contextual_runtime.py`
+- `core/execution_trace.py`
 - `core/internet_state.py`
 - `core/model_router.py`
 - `core/network_safety.py`
+- `core/policy_consistency.py`
+- `core/production_runtime.py`
+- `core/production_snapshot.py`
 - `core/review_gate.py`
 - `core/safety.py`
 - `core/task_manager.py`
@@ -376,13 +385,17 @@ make untrusted Python safe.
 
 ## v2.10 cross-layer reliability architecture
 
-The implementation contract for the v2.10 stabilization release is documented
-in [`docs/v2.10-architecture.md`](v2.10-architecture.md). Implemented stages now
-include the fail-closed runtime snapshot gate and bounded redacted contextual
-execution traces. Trace collection uses request-local state and payload-free
-plan observations; persistence is disabled by default, writes allowlisted
-UTF-8 JSONL only when explicitly enabled, and retains one bounded backup.
-Trace failures cannot alter execution results. Runtime-state ownership, the
-complete failure-path matrix, release identity, and later stages remain
-planned. Existing v2.0–v2.9 boundaries above remain authoritative unless that
-document explicitly narrows them.
+The implemented contract for the v2.10 stabilization release is documented in
+[`docs/v2.10-architecture.md`](v2.10-architecture.md). Startup composes one
+immutable production snapshot across routing, domains, capabilities, tools,
+plugins, permissions, model profiles, and context budgets. Fatal drift blocks
+normal tool publication; intentional nonautomatic routes are warnings.
+
+Execution traces use request-local state and payload-free plan observations.
+Persistence is disabled by default, writes allowlisted UTF-8 JSONL only when
+explicitly enabled, and retains one bounded backup under a process-local lock.
+Trace, serializer, callback, directory, append, and rotation failures cannot
+alter execution results. Mutable profile/task state is untracked and ignored;
+profile replacement is atomic. Stable failure codes and deterministic synthesis
+fallbacks complete the v2.10 failure matrix without introducing a second tool
+execution path.
