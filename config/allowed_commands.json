@@ -101,7 +101,7 @@
       "description": "Run the VEGA smoke test.",
       "argv": [
         "python",
-        "scripts\\smoke_test.py"
+        "scripts/smoke_test.py"
       ],
       "timeout_seconds": 60,
       "enabled": true
@@ -111,7 +111,7 @@
       "description": "Run the VEGA identity check.",
       "argv": [
         "python",
-        "scripts\\check_identity.py"
+        "scripts/check_identity.py"
       ],
       "timeout_seconds": 30,
       "enabled": true
@@ -121,7 +121,7 @@
       "description": "Validate the production cross-layer policy snapshot.",
       "argv": [
         "python",
-        "scripts\\check_policy_consistency.py"
+        "scripts/check_policy_consistency.py"
       ],
       "timeout_seconds": 30,
       "enabled": true
@@ -131,7 +131,7 @@
       "description": "Validate whitespace and generated-state Git hygiene.",
       "argv": [
         "python",
-        "scripts\\check_repository_hygiene.py"
+        "scripts/check_repository_hygiene.py"
       ],
       "timeout_seconds": 30,
       "enabled": true

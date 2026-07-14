@@ -65,7 +65,7 @@ def test_release_check_includes_policy_consistency() -> None:
     assert "policy-consistency" in release_policy["checks"]["commands"]
     assert commands["policy-consistency"]["argv"] == [
         "python",
-        "scripts\\check_policy_consistency.py",
+        "scripts/check_policy_consistency.py",
     ]
     assert commands["tests"]["argv"] == [
         "python",
@@ -81,7 +81,7 @@ def test_release_check_includes_policy_consistency() -> None:
     ]
     assert commands["repository-hygiene"]["argv"] == [
         "python",
-        "scripts\\check_repository_hygiene.py",
+        "scripts/check_repository_hygiene.py",
     ]
     assert "repository-hygiene" in release_policy["checks"]["commands"]
 
