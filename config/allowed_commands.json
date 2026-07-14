@@ -50,7 +50,7 @@
         "-p",
         "no:cacheprovider",
         "--basetemp",
-        ".tmp/pytest-release",
+        ".tmp/pytest-release-{run_id}",
         "--tb=short"
       ],
       "timeout_seconds": 180,

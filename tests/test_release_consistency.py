@@ -103,7 +103,7 @@ def test_release_check_includes_policy_consistency() -> None:
         "-p",
         "no:cacheprovider",
         "--basetemp",
-        ".tmp/pytest-release",
+        ".tmp/pytest-release-{run_id}",
         "--tb=short",
     ]
     assert commands["repository-hygiene"]["argv"] == [

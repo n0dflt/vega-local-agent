@@ -400,6 +400,53 @@ def _format_generic(value: Any) -> str:
     return text
 
 
+def _format_process_summary(title: str, value: Any) -> str:
+    data, envelope_error = _unwrap_tool_data(value)
+    if envelope_error:
+        return f"{title}\nTool failed: {envelope_error}"
+    diagnostics = _read_value(data, "diagnostics")
+    if not isinstance(diagnostics, Mapping):
+        return f"{title}\n{_format_generic(value)}"
+
+    returncode = diagnostics.get("returncode")
+    timed_out = diagnostics.get("timed_out") is True
+    reason_code = diagnostics.get("reason_code")
+    status = "passed" if returncode == 0 and not timed_out and not reason_code else "failed"
+    lines = [title, f"Status: {status}"]
+    if isinstance(returncode, int) and not isinstance(returncode, bool):
+        lines.append(f"Exit code: {returncode}")
+    duration_ms = diagnostics.get("duration_ms")
+    if isinstance(duration_ms, int) and duration_ms >= 0:
+        lines.append(f"Duration: {duration_ms / 1000:.2f} seconds")
+    stdout_summary = diagnostics.get("stdout_summary")
+    if isinstance(stdout_summary, Mapping):
+        counts = stdout_summary.get("pytest_counts")
+        if isinstance(counts, Mapping) and counts:
+            ordered_labels = (
+                "passed",
+                "failed",
+                "skipped",
+                "errors",
+                "warnings",
+                "xfailed",
+                "xpassed",
+                "deselected",
+            )
+            count_parts = [
+                f"{counts[label]} {label}"
+                for label in ordered_labels
+                if isinstance(counts.get(label), int)
+            ]
+            if count_parts:
+                lines.append("Result: " + ", ".join(count_parts))
+        if stdout_summary.get("truncated") is True:
+            lines.append("Output: truncated in the structured tool result")
+    warning = diagnostics.get("warning")
+    if isinstance(warning, str) and warning:
+        lines.append(f"Warning: {warning}")
+    return "\n".join(lines)
+
+
 def format_step_result(
     step: StepExecutionResult,
 ) -> str:
@@ -435,10 +482,10 @@ def format_step_result(
         )
 
     if step.tool_name == "test_run":
-        return "Test suite\n" + _format_generic(step.data)
+        return _format_process_summary("Test suite", step.data)
 
     if step.tool_name == "terminal_run":
-        return "Compile check\n" + _format_generic(step.data)
+        return _format_process_summary("Compile check", step.data)
 
     if step.tool_name == "release_status":
         return _format_status_mapping(

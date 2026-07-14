@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,10 +25,30 @@ ALLOWED_EXECUTABLES = {"python", "py"}
 SUPPORTED_SCHEMA_VERSION = 1
 MAX_TIMEOUT_SECONDS = 300
 TRUNCATION_MARKER = "\n[output truncated]"
+RUN_ID_TOKEN = "{run_id}"
+_PYTEST_COUNT_PATTERN = re.compile(
+    r"(?P<count>\d+) (?P<label>passed|failed|skipped|warnings?|errors?|"
+    r"xfailed|xpassed|deselected)\b"
+)
+_EXCEPTION_PATTERN = re.compile(
+    r"\b([A-Za-z][A-Za-z0-9_]*(?:Error|Exception))\b"
+)
 
 
-def _result(data: Any = None, error: str | None = None) -> dict:
-    return {"ok": error is None, "error": error, "data": data if error is None else None}
+def _result(
+    data: Any = None,
+    error: str | None = None,
+    *,
+    reason_code: str = "",
+    diagnostics: dict[str, Any] | None = None,
+) -> dict:
+    return {
+        "ok": error is None,
+        "error": error,
+        "data": data if error is None else None,
+        "reason_code": reason_code,
+        "diagnostics": diagnostics,
+    }
 
 
 def _project_root(project_root: Path | str | None) -> Path:
@@ -189,6 +212,106 @@ def _truncate_output(value: str, limit: int) -> tuple[str, bool]:
     return value[:limit] + TRUNCATION_MARKER, True
 
 
+def _summarize_output(value: str, *, truncated: bool) -> dict[str, Any]:
+    """Return bounded metadata without persisting raw process output."""
+
+    counts: dict[str, int] = {}
+    for match in _PYTEST_COUNT_PATTERN.finditer(value):
+        counts[match.group("label")] = int(match.group("count"))
+    exception_types = tuple(dict.fromkeys(_EXCEPTION_PATTERN.findall(value)))[:8]
+    return {
+        "chars": len(value),
+        "lines": len(value.splitlines()),
+        "truncated": truncated,
+        "pytest_counts": counts,
+        "exception_types": exception_types,
+    }
+
+
+def _expand_run_tokens(
+    argv: tuple[str, ...],
+    root: Path,
+) -> tuple[tuple[str, ...], tuple[Path, ...]]:
+    """Expand allowlisted per-run paths under the managed .tmp directory."""
+
+    if not any(RUN_ID_TOKEN in argument for argument in argv):
+        return argv, ()
+
+    run_id = uuid.uuid4().hex
+    managed_root = (root / ".tmp").resolve(strict=False)
+    expanded: list[str] = []
+    managed_paths: list[Path] = []
+    for argument in argv:
+        resolved_argument = argument.replace(RUN_ID_TOKEN, run_id)
+        expanded.append(resolved_argument)
+        if RUN_ID_TOKEN not in argument:
+            continue
+        candidate = Path(resolved_argument)
+        if candidate.is_absolute():
+            raise TerminalPolicyError("Managed run paths must be project-relative.")
+        resolved = (root / candidate).resolve(strict=False)
+        if resolved == managed_root or not _is_within(resolved, managed_root):
+            raise TerminalPolicyError("Managed run paths must stay inside .tmp.")
+        managed_paths.append(resolved)
+    return tuple(expanded), tuple(managed_paths)
+
+
+def _cleanup_managed_paths(paths: tuple[Path, ...], root: Path) -> str | None:
+    def remove_readonly(function, path, _excinfo) -> None:
+        os.chmod(path, stat.S_IWRITE)
+        function(path)
+
+    managed_root = (root / ".tmp").resolve(strict=False)
+    for path in paths:
+        resolved = path.resolve(strict=False)
+        if resolved == managed_root or not _is_within(resolved, managed_root):
+            return "Managed temporary path cleanup was refused."
+        try:
+            if resolved.is_dir():
+                shutil.rmtree(resolved, onexc=remove_readonly)
+            elif resolved.exists():
+                resolved.unlink()
+        except OSError as exc:
+            return f"Managed temporary path cleanup warning: {type(exc).__name__}."
+    return None
+
+
+def _diagnostics(
+    *,
+    command_id: str,
+    effective_argv: tuple[str, ...],
+    root: Path,
+    timeout_seconds: int,
+    returncode: int | None,
+    timed_out: bool,
+    duration_ms: int,
+    stdout: str,
+    stderr: str,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+    reason_code: str,
+) -> dict[str, Any]:
+    return {
+        "tool": "terminal_run",
+        "command_id": command_id,
+        "resolved_executable": effective_argv[0],
+        "cwd": str(root),
+        "returncode": returncode,
+        "timed_out": timed_out,
+        "duration_ms": duration_ms,
+        "timeout_seconds": timeout_seconds,
+        "stdout_summary": _summarize_output(
+            stdout,
+            truncated=stdout_truncated,
+        ),
+        "stderr_summary": _summarize_output(
+            stderr,
+            truncated=stderr_truncated,
+        ),
+        "reason_code": reason_code,
+    }
+
+
 def _write_audit(root: Path, record: dict) -> str | None:
     try:
         audit_path = root / "logs" / "terminal" / "terminal_commands.jsonl"
@@ -219,11 +342,12 @@ def run_allowed_command(command_id: str, project_root: Path | str | None = None)
         # Python commands remain allowlisted by their configured argv.  At
         # execution time they use the interpreter that is already running
         # VEGA, so a launcher-selected runtime does not depend on PATH.
-        effective_argv = (
+        runtime_argv = (
             (sys.executable, *argv[1:])
             if executable in {"python", "python.exe"}
             else argv
         )
+        effective_argv, managed_paths = _expand_run_tokens(runtime_argv, root)
 
         environment = os.environ.copy()
         for variable in ("PYTHONSTARTUP", "PYTHONINSPECT", "PYTHONPATH", "PYTHONHOME"):
@@ -256,13 +380,64 @@ def run_allowed_command(command_id: str, project_root: Path | str | None = None)
             timeout_message = f"Command timed out after {command['timeout_seconds']} seconds."
             stderr = f"{stderr.rstrip()}\n{timeout_message}" if stderr else timeout_message
         except OSError as exc:
-            return _result(error=f"Terminal command could not be started: {exc}")
+            duration_ms = int((time.monotonic() - started) * 1000)
+            reason_code = "runtime_unavailable"
+            diagnostics = _diagnostics(
+                command_id=normalized,
+                effective_argv=effective_argv,
+                root=root,
+                timeout_seconds=command["timeout_seconds"],
+                returncode=None,
+                timed_out=False,
+                duration_ms=duration_ms,
+                stdout="",
+                stderr=type(exc).__name__,
+                stdout_truncated=False,
+                stderr_truncated=False,
+                reason_code=reason_code,
+            )
+            warning = _cleanup_managed_paths(managed_paths, root)
+            audit_warning = _write_audit(
+                root,
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    **diagnostics,
+                    "argv": effective_argv,
+                    "ok": False,
+                    "truncated": False,
+                },
+            )
+            if warning is None:
+                warning = audit_warning
+            diagnostics["warning"] = warning
+            return _result(
+                error="Terminal command could not be started.",
+                reason_code=reason_code,
+                diagnostics=diagnostics,
+            )
 
         duration_ms = int((time.monotonic() - started) * 1000)
-        stdout, stdout_truncated = _truncate_output(stdout, max_output_chars)
-        stderr, stderr_truncated = _truncate_output(stderr, max_output_chars)
+        raw_stdout = stdout
+        raw_stderr = stderr
+        stdout, stdout_truncated = _truncate_output(raw_stdout, max_output_chars)
+        stderr, stderr_truncated = _truncate_output(raw_stderr, max_output_chars)
         truncated = stdout_truncated or stderr_truncated
         ok = returncode == 0 and not timed_out
+        reason_code = "" if ok else ("timeout" if timed_out else "command_failed")
+        diagnostics = _diagnostics(
+            command_id=normalized,
+            effective_argv=effective_argv,
+            root=root,
+            timeout_seconds=command["timeout_seconds"],
+            returncode=returncode,
+            timed_out=timed_out,
+            duration_ms=duration_ms,
+            stdout=raw_stdout,
+            stderr=raw_stderr,
+            stdout_truncated=stdout_truncated,
+            stderr_truncated=stderr_truncated,
+            reason_code=reason_code,
+        )
         data = {
             "command_id": normalized,
             "argv": effective_argv,
@@ -272,18 +447,26 @@ def run_allowed_command(command_id: str, project_root: Path | str | None = None)
             "timed_out": timed_out,
             "truncated": truncated,
             "duration_ms": duration_ms,
+            "reason_code": reason_code,
+            "diagnostics": diagnostics,
             "warning": None,
         }
-        data["warning"] = _write_audit(root, {
+        cleanup_warning = _cleanup_managed_paths(managed_paths, root)
+        audit_warning = _write_audit(root, {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "command_id": normalized,
+            **diagnostics,
             "argv": effective_argv,
-            "returncode": returncode,
             "ok": ok,
-            "timed_out": timed_out,
             "truncated": truncated,
-            "duration_ms": duration_ms,
         })
-        return {"ok": ok, "error": None, "data": data}
+        data["warning"] = cleanup_warning or audit_warning
+        diagnostics["warning"] = data["warning"]
+        return {
+            "ok": ok,
+            "error": None,
+            "data": data,
+            "reason_code": reason_code,
+            "diagnostics": diagnostics,
+        }
     except (TerminalPolicyError, OSError) as exc:
         return _result(error=str(exc))

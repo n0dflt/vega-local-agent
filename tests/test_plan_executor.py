@@ -301,6 +301,63 @@ def test_tool_reported_failure_stops_plan() -> None:
     assert "file could not be read" not in repr(result)
     assert calls == ["failure"]
 
+
+@pytest.mark.parametrize(
+    ("reason_code", "nested", "expected_message"),
+    [
+        (
+            "test_failure",
+            {"returncode": 1},
+            "Test suite failed with exit code 1.",
+        ),
+        (
+            "timeout",
+            {"returncode": -1},
+            "Test execution exceeded the configured timeout.",
+        ),
+        (
+            "runtime_unavailable",
+            None,
+            "Test runner could not start the configured Python runtime.",
+        ),
+        (
+            "result_parse_error",
+            None,
+            "Test result could not be parsed.",
+        ),
+    ],
+)
+def test_test_run_failure_uses_safe_specific_reason(
+    reason_code: str,
+    nested: dict[str, int] | None,
+    expected_message: str,
+) -> None:
+    diagnostics = {
+        "tool": "test_run",
+        "reason_code": reason_code,
+    }
+    if nested is not None:
+        nested = {**nested, "diagnostics": diagnostics}
+    result = execute_plan(
+        _plan(ToolCallStep(1, "test_run", required_permission="READ")),
+        ToolExecutor(
+            {
+                "test_run": lambda: {
+                    "ok": False,
+                    "error": None,
+                    "data": nested,
+                    "reason_code": reason_code,
+                    "diagnostics": diagnostics,
+                }
+            }
+        ),
+    )
+
+    assert result.status is PlanExecutionStatus.FAILED
+    assert result.steps[0].error_code == reason_code
+    assert expected_message in result.error
+    assert result.steps[0].data == {"diagnostics": diagnostics}
+
 def test_invalid_executor_is_rejected() -> None:
     plan = _plan(
         ToolCallStep(
@@ -494,6 +551,45 @@ def test_confirmed_execute_steps_use_existing_one_time_confirmation() -> None:
     assert result.status is PlanExecutionStatus.COMPLETED
     assert calls == ["tests", "compile"]
     assert len(prompts) == 2
+
+
+def test_workspace_diagnostics_runs_all_three_steps_once() -> None:
+    calls: list[str] = []
+
+    def complete(name: str) -> dict[str, object]:
+        calls.append(name)
+        return {"ok": True, "error": None, "data": {"name": name}}
+
+    plan = _plan(
+        ToolCallStep(1, "git_status", required_permission="READ"),
+        ToolCallStep(
+            2,
+            "test_run",
+            required_permission="EXECUTE",
+            depends_on=(1,),
+        ),
+        ToolCallStep(
+            3,
+            "terminal_run",
+            required_permission="EXECUTE",
+            depends_on=(2,),
+        ),
+    )
+    result = execute_plan(
+        plan,
+        ToolExecutor(
+            {
+                "git_status": lambda: complete("git_status"),
+                "test_run": lambda: complete("test_run"),
+                "terminal_run": lambda: complete("terminal_run"),
+            }
+        ),
+        automatic_permissions=("READ", "EXECUTE"),
+    )
+
+    assert result.status is PlanExecutionStatus.COMPLETED
+    assert calls == ["git_status", "test_run", "terminal_run"]
+    assert all(step.ok for step in result.steps)
 
 
 def test_progress_callback_failure_never_repeats_tool() -> None:

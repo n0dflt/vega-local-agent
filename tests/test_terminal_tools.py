@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -111,8 +112,14 @@ class TerminalToolsTests(unittest.TestCase):
     def test_successful_execution(self):
         result = self.run_script("success", "print('terminal tool test')")
         self.assertTrue(result["ok"], result["error"])
+        self.assertEqual(result["reason_code"], "")
         self.assertEqual(result["data"]["returncode"], 0)
         self.assertIn("terminal tool test", result["data"]["stdout"])
+        self.assertEqual(result["data"]["diagnostics"]["cwd"], str(self.root.resolve()))
+        self.assertEqual(
+            result["data"]["diagnostics"]["resolved_executable"],
+            sys.executable,
+        )
 
     def test_nonzero_exit_preserves_output(self):
         result = self.run_script(
@@ -120,6 +127,7 @@ class TerminalToolsTests(unittest.TestCase):
             "import sys\nprint('failure output')\nprint('failure error', file=sys.stderr)\nraise SystemExit(3)",
         )
         self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "command_failed")
         self.assertEqual(result["data"]["returncode"], 3)
         self.assertIn("failure output", result["data"]["stdout"])
         self.assertIn("failure error", result["data"]["stderr"])
@@ -127,12 +135,14 @@ class TerminalToolsTests(unittest.TestCase):
     def test_timeout_is_reported(self):
         result = self.run_script("timeout", "import time\ntime.sleep(2)", timeout=1)
         self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "timeout")
         self.assertTrue(result["data"]["timed_out"])
         self.assertEqual(result["data"]["returncode"], -1)
         self.assertIn("timed out", result["data"]["stderr"])
 
     def test_stdout_is_bounded(self):
         result = self.run_script("stdout", "print('x' * 1000)", max_output_chars=40)
+        self.assertTrue(result["ok"])
         self.assertTrue(result["data"]["truncated"])
         self.assertIn("[output truncated]", result["data"]["stdout"])
 
@@ -142,6 +152,45 @@ class TerminalToolsTests(unittest.TestCase):
         )
         self.assertTrue(result["data"]["truncated"])
         self.assertIn("[output truncated]", result["data"]["stderr"])
+
+    def test_runtime_unavailable_has_specific_reason(self):
+        self.write_policy([self.command("missing", "missing.py")])
+        with patch(
+            "tools.terminal_tools.subprocess.run",
+            side_effect=FileNotFoundError("runtime missing"),
+        ):
+            result = run_allowed_command("missing", self.root)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "runtime_unavailable")
+        self.assertIsNone(result["data"])
+        self.assertEqual(
+            result["diagnostics"]["resolved_executable"],
+            sys.executable,
+        )
+
+    def test_managed_run_path_is_unique_and_cleaned(self):
+        command = self.command("managed", "managed.py")
+        command["argv"].append(".tmp/pytest-release-{run_id}")
+        self.write_policy([command])
+        (self.root / "managed.py").write_text(
+            "import pathlib, stat, sys\n"
+            "path = pathlib.Path(sys.argv[1])\n"
+            "path.mkdir(parents=True)\n"
+            "readonly = path / 'readonly.txt'\n"
+            "readonly.write_text('managed', encoding='utf-8')\n"
+            "readonly.chmod(stat.S_IREAD)\n"
+            "print(path)\n",
+            encoding="utf-8",
+        )
+
+        result = run_allowed_command("managed", self.root)
+
+        self.assertTrue(result["ok"], result["error"])
+        expanded = result["data"]["argv"][-1]
+        self.assertNotIn("{run_id}", expanded)
+        self.assertRegex(expanded, r"^\.tmp/pytest-release-[0-9a-f]{32}$")
+        self.assertFalse((self.root / expanded).exists())
 
     def test_audit_excludes_output_and_environment(self):
         result = self.run_script("audit", "print('secret output')")
@@ -153,6 +202,8 @@ class TerminalToolsTests(unittest.TestCase):
         self.assertNotIn("environment", record)
         self.assertNotIn("secret output", json.dumps(record))
         self.assertEqual(record["command_id"], "audit")
+        self.assertIn("stdout_summary", record)
+        self.assertEqual(record["reason_code"], "")
 
     def test_subprocess_security_options_and_environment(self):
         self.write_policy([self.command("secure", "secure.py")])
@@ -166,6 +217,7 @@ class TerminalToolsTests(unittest.TestCase):
         kwargs = mocked.call_args.kwargs
         self.assertIs(kwargs["shell"], False)
         self.assertEqual(kwargs["cwd"], self.root.resolve())
+        self.assertEqual(mocked.call_args.args[0][0], sys.executable)
         for name in ("PYTHONSTARTUP", "PYTHONINSPECT", "PYTHONPATH", "PYTHONHOME"):
             self.assertNotIn(name, kwargs["env"])
         self.assertEqual(kwargs["env"]["PYTHONNOUSERSITE"], "1")

@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 try:
@@ -229,6 +230,50 @@ def append_request_metrics(
             sort_keys=True,
         ),
     )
+
+
+def append_tool_diagnostics(log_file: Path, execution_result: object) -> None:
+    """Persist process diagnostics while excluding raw stdout and stderr."""
+
+    records: list[dict[str, object]] = []
+    for step in getattr(execution_result, "steps", ()):
+        data = getattr(step, "data", None)
+        if not isinstance(data, Mapping):
+            continue
+        diagnostics = data.get("diagnostics")
+        nested = data.get("data")
+        if not isinstance(diagnostics, Mapping) and isinstance(nested, Mapping):
+            diagnostics = nested.get("diagnostics")
+        if not isinstance(diagnostics, Mapping):
+            continue
+        if diagnostics.get("tool") not in {"terminal_run", "test_run"}:
+            continue
+        record = {
+            key: diagnostics[key]
+            for key in (
+                "tool",
+                "command_id",
+                "group_id",
+                "resolved_executable",
+                "cwd",
+                "returncode",
+                "timed_out",
+                "duration_ms",
+                "timeout_seconds",
+                "stdout_summary",
+                "stderr_summary",
+                "reason_code",
+                "warning",
+            )
+            if key in diagnostics
+        }
+        records.append(record)
+    if records:
+        append_log(
+            log_file,
+            "TOOL_DIAGNOSTICS",
+            json.dumps(records, ensure_ascii=False, sort_keys=True),
+        )
 
 
 def create_log(root: Path, model: str) -> Path:
@@ -1523,6 +1568,11 @@ def main() -> int:
                     "CONTEXTUAL",
                     contextual_result.message,
                 )
+                if contextual_result.execution_result is not None:
+                    append_tool_diagnostics(
+                        context.log_file,
+                        contextual_result.execution_result,
+                    )
                 if contextual_result.planning_diagnostics is not None:
                     append_log(
                         context.log_file,

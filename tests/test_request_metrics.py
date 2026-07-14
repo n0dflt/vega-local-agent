@@ -1,8 +1,9 @@
 import json
 from datetime import datetime, timedelta, timezone
 from threading import Thread
+from types import SimpleNamespace
 
-from core.agent_runtime import append_request_metrics
+from core.agent_runtime import append_request_metrics, append_tool_diagnostics
 from core.request_metrics import (
     RequestMetrics,
     RequestPhase,
@@ -186,3 +187,38 @@ def test_session_log_receives_structured_request_metrics(tmp_path) -> None:
     assert record["input_tokens"] == 7
     assert record["output_tokens"] == 3
     assert record["total_tokens"] == 10
+
+
+def test_session_log_receives_safe_tool_diagnostics(tmp_path) -> None:
+    log_file = tmp_path / "session.txt"
+    log_file.write_text("VEGA session log\n", encoding="utf-8")
+    diagnostics = {
+        "tool": "test_run",
+        "command_id": "tests",
+        "group_id": "all",
+        "resolved_executable": "python-runtime",
+        "cwd": str(tmp_path),
+        "returncode": 0,
+        "timed_out": False,
+        "duration_ms": 100,
+        "timeout_seconds": 180,
+        "stdout_summary": {"chars": 20, "pytest_counts": {"passed": 1}},
+        "stderr_summary": {"chars": 0},
+        "reason_code": "",
+        "stdout": "TOP-SECRET-OUTPUT",
+    }
+    execution_result = SimpleNamespace(
+        steps=(
+            SimpleNamespace(
+                data={"data": {"diagnostics": diagnostics}},
+            ),
+        ),
+    )
+
+    append_tool_diagnostics(log_file, execution_result)
+
+    text = log_file.read_text(encoding="utf-8")
+    assert "[TOOL_DIAGNOSTICS]" in text
+    assert '"tool": "test_run"' in text
+    assert '"returncode": 0' in text
+    assert "TOP-SECRET-OUTPUT" not in text

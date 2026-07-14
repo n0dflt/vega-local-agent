@@ -243,6 +243,17 @@ def test_untrusted_error_codes_fail_closed_to_fixed_vocabulary() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "reason_code",
+    ["test_failure", "timeout", "runtime_unavailable", "result_parse_error"],
+)
+def test_test_runner_error_codes_are_allowlisted(reason_code: str) -> None:
+    assert safe_trace_error_code(
+        reason_code,
+        fallback="tool_execution_failed",
+    ) == reason_code
+
+
 def test_trace_persistence_is_disabled_by_default(
     tmp_path: Path,
     monkeypatch,

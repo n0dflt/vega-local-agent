@@ -105,6 +105,7 @@ class TestToolsTests(unittest.TestCase):
         result = run_test_group("terminal")
 
         self.assertTrue(result["ok"])
+        self.assertEqual(result["reason_code"], "")
         self.assertEqual(
             result["data"]["group_id"],
             "terminal",
@@ -117,6 +118,29 @@ class TestToolsTests(unittest.TestCase):
             "18 passed",
             result["data"]["stdout"],
         )
+
+    @patch("tools.test_tools.run_allowed_command")
+    def test_skipped_tests_remain_successful(self, run_allowed_command):
+        run_allowed_command.return_value = {
+            "ok": True,
+            "error": None,
+            "data": {
+                "command_id": "tests",
+                "stdout": "10 passed, 2 skipped\n",
+                "stderr": "",
+                "returncode": 0,
+                "timed_out": False,
+                "truncated": False,
+                "duration_ms": 100,
+                "warning": None,
+            },
+        }
+
+        result = run_test_group("all")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["reason_code"], "")
+        self.assertIn("skipped", result["data"]["stdout"])
 
     @patch("tools.test_tools.run_allowed_command")
     def test_documentation_group_uses_allowed_command(
@@ -177,6 +201,7 @@ class TestToolsTests(unittest.TestCase):
         result = run_test_group("all")
 
         self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "test_failure")
         self.assertEqual(
             result["data"]["returncode"],
             1,
@@ -185,6 +210,95 @@ class TestToolsTests(unittest.TestCase):
             "1 failed",
             result["data"]["stdout"],
         )
+
+    @patch("tools.test_tools.run_allowed_command")
+    def test_all_nonzero_pytest_exit_codes_are_test_failures(
+        self,
+        run_allowed_command,
+    ):
+        for returncode in (1, 2, 5):
+            with self.subTest(returncode=returncode):
+                run_allowed_command.return_value = {
+                    "ok": False,
+                    "error": None,
+                    "data": {
+                        "command_id": "tests",
+                        "stdout": "pytest did not pass\n",
+                        "stderr": "",
+                        "returncode": returncode,
+                        "timed_out": False,
+                        "truncated": False,
+                        "duration_ms": 100,
+                        "warning": None,
+                    },
+                }
+
+                result = run_test_group("all")
+
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["reason_code"], "test_failure")
+                self.assertEqual(result["data"]["returncode"], returncode)
+
+    @patch("tools.test_tools.run_allowed_command")
+    def test_timeout_has_specific_reason(self, run_allowed_command):
+        run_allowed_command.return_value = {
+            "ok": False,
+            "error": None,
+            "reason_code": "timeout",
+            "data": {
+                "command_id": "tests",
+                "stdout": "",
+                "stderr": "timed out",
+                "returncode": -1,
+                "timed_out": True,
+                "truncated": False,
+                "duration_ms": 180000,
+                "warning": None,
+            },
+        }
+
+        result = run_test_group("all")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "timeout")
+        self.assertTrue(result["data"]["timed_out"])
+
+    @patch("tools.test_tools.run_allowed_command")
+    def test_runtime_unavailable_has_specific_reason(self, run_allowed_command):
+        diagnostics = {
+            "tool": "terminal_run",
+            "resolved_executable": "python-runtime",
+        }
+        run_allowed_command.return_value = {
+            "ok": False,
+            "error": "Terminal command could not be started.",
+            "data": None,
+            "reason_code": "runtime_unavailable",
+            "diagnostics": diagnostics,
+        }
+
+        result = run_test_group("all")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "runtime_unavailable")
+        self.assertIn("Python runtime", result["error"])
+
+    @patch("tools.test_tools.run_allowed_command")
+    def test_malformed_result_has_parse_reason(self, run_allowed_command):
+        run_allowed_command.return_value = {
+            "ok": True,
+            "error": None,
+            "data": {
+                "returncode": "0",
+                "timed_out": False,
+            },
+        }
+
+        result = run_test_group("all")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "result_parse_error")
+        self.assertIn("could not be parsed", result["error"])
 
     @patch("tools.test_tools.run_allowed_command")
     def test_command_start_error_is_controlled(

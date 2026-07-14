@@ -148,23 +148,69 @@ def _normalize_permissions(
     return frozenset(normalized)
 
 
-def _reported_tool_failure(data: Any) -> str:
-    """Return an error reported inside a tool result."""
+def _reported_tool_failure(
+    tool_name: str,
+    data: Any,
+) -> tuple[str, str, Mapping[str, Any] | None]:
+    """Return a safe category reported inside a tool result."""
 
     if isinstance(data, Mapping):
         if data.get("ok") is not False:
-            return ""
+            return "", "", None
 
-        return "Tool reported an unsuccessful result."
+        if tool_name == "test_run":
+            reason_code = data.get("reason_code")
+            nested = data.get("data")
+            diagnostics = data.get("diagnostics")
+            if isinstance(nested, Mapping):
+                diagnostics = nested.get("diagnostics", diagnostics)
+            safe_diagnostics = (
+                dict(diagnostics)
+                if isinstance(diagnostics, Mapping)
+                else None
+            )
+            if reason_code == "test_failure":
+                returncode = nested.get("returncode") if isinstance(nested, Mapping) else None
+                if isinstance(returncode, int) and not isinstance(returncode, bool):
+                    return (
+                        f"Test suite failed with exit code {returncode}.",
+                        "test_failure",
+                        safe_diagnostics,
+                    )
+                return (
+                    "Test suite failed.",
+                    "test_failure",
+                    safe_diagnostics,
+                )
+            if reason_code == "timeout":
+                return (
+                    "Test execution exceeded the configured timeout.",
+                    "timeout",
+                    safe_diagnostics,
+                )
+            if reason_code == "runtime_unavailable":
+                return (
+                    "Test runner could not start the configured Python runtime.",
+                    "runtime_unavailable",
+                    safe_diagnostics,
+                )
+            if reason_code == "result_parse_error":
+                return (
+                    "Test result could not be parsed.",
+                    "result_parse_error",
+                    safe_diagnostics,
+                )
+
+        return "Tool reported an unsuccessful result.", "tool_reported_failure", None
 
     try:
         ok = getattr(data, "ok", None)
     except Exception:
-        return ""
+        return "", "", None
 
     if ok is not False:
-        return ""
-    return "Tool reported an unsuccessful result."
+        return "", "", None
+    return "Tool reported an unsuccessful result.", "tool_reported_failure", None
 
 
 def execute_plan(
@@ -414,9 +460,16 @@ def execute_plan(
             )
 
         reported_error = ""
+        reported_error_code = ""
+        reported_diagnostics = None
 
         if tool_result.ok:
-            reported_error = _reported_tool_failure(
+            (
+                reported_error,
+                reported_error_code,
+                reported_diagnostics,
+            ) = _reported_tool_failure(
+                step.tool_name,
                 tool_result.data
             )
 
@@ -424,9 +477,16 @@ def execute_plan(
             tool_result = ToolExecutionResult(
                 status=ToolExecutionStatus.FAILED,
                 tool_name=tool_result.tool_name,
-                data=None,
+                data=(
+                    {"diagnostics": dict(reported_diagnostics)}
+                    if reported_diagnostics is not None
+                    else None
+                ),
                 error=reported_error,
-                error_code="tool_reported_failure",
+                error_code=(
+                    reported_error_code
+                    or "tool_reported_failure"
+                ),
             )
 
         step_result = (

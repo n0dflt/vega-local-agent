@@ -211,6 +211,46 @@ def test_tool_reported_failure_does_not_fall_back(
     assert "tool_reported_failure" in result.execution_trace.error_codes
 
 
+def test_test_run_failure_surfaces_specific_safe_reason(tmp_path: Path) -> None:
+    diagnostics = {
+        "tool": "test_run",
+        "command_id": "tests",
+        "group_id": "all",
+        "reason_code": "test_failure",
+    }
+    registry = {
+        "test_run": lambda **arguments: {
+            "ok": False,
+            "error": None,
+            "reason_code": "test_failure",
+            "diagnostics": diagnostics,
+            "data": {
+                "returncode": 1,
+                "diagnostics": diagnostics,
+            },
+        },
+    }
+
+    result = try_execute_contextual_request(
+        "run full pytest tests",
+        tmp_path,
+        ToolExecutor(registry),
+        registry=registry,
+        capability_config={
+            "test_run": {
+                "permission": "READ",
+                "capabilities": ["test.run"],
+            },
+        },
+        policy_config=_policy(enabled=True),
+    )
+
+    assert result.status is ContextualRuntimeStatus.FAILED
+    assert "Test suite failed with exit code 1." in result.message
+    assert result.execution_trace is not None
+    assert "test_failure" in result.execution_trace.error_codes
+
+
 def test_nonautomatic_permission_is_blocked(
     tmp_path: Path,
 ) -> None:

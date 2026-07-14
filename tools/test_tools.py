@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -62,11 +63,19 @@ class RunnerPolicyError(ValueError):
     """Controlled Test Runner error."""
 
 
-def _result(data: Any = None, error: str | None = None) -> dict:
+def _result(
+    data: Any = None,
+    error: str | None = None,
+    *,
+    reason_code: str = "",
+    diagnostics: Mapping[str, Any] | None = None,
+) -> dict:
     return {
         "ok": error is None,
         "error": error,
         "data": data if error is None else None,
+        "reason_code": reason_code,
+        "diagnostics": dict(diagnostics) if diagnostics is not None else None,
     }
 
 
@@ -154,19 +163,66 @@ def run_test_group(
     )
 
     if command_result["data"] is None:
+        reason_code = command_result.get("reason_code", "")
+        diagnostics = command_result.get("diagnostics")
+        if reason_code == "runtime_unavailable":
+            error = "Test runner could not start the configured Python runtime."
+        else:
+            error = command_result["error"] or "Test command could not be started."
         return _result(
-            error=(
-                command_result["error"]
-                or "Test command could not be started."
-            )
+            error=error,
+            reason_code=reason_code,
+            diagnostics=diagnostics if isinstance(diagnostics, Mapping) else None,
+        )
+
+    if not isinstance(command_result["data"], Mapping):
+        return _result(
+            error="Test result could not be parsed.",
+            reason_code="result_parse_error",
         )
 
     data = dict(command_result["data"])
+    returncode = data.get("returncode")
+    timed_out = data.get("timed_out")
+    if (
+        isinstance(returncode, bool)
+        or not isinstance(returncode, int)
+        or not isinstance(timed_out, bool)
+    ):
+        return _result(
+            error="Test result could not be parsed.",
+            reason_code="result_parse_error",
+        )
+
+    if timed_out:
+        reason_code = "timeout"
+    elif command_result["ok"] and returncode == 0:
+        reason_code = ""
+    elif not command_result["ok"] and returncode != 0:
+        reason_code = "test_failure"
+    else:
+        return _result(
+            error="Test result could not be parsed.",
+            reason_code="result_parse_error",
+        )
+
     data["group_id"] = normalized
     data["description"] = definition["description"]
+    data["reason_code"] = reason_code
+    diagnostics = data.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        diagnostics = dict(diagnostics)
+        diagnostics["tool"] = "test_run"
+        diagnostics["group_id"] = normalized
+        diagnostics["reason_code"] = reason_code
+        data["diagnostics"] = diagnostics
+    else:
+        diagnostics = None
 
     return {
         "ok": command_result["ok"],
         "error": command_result["error"],
         "data": data,
+        "reason_code": reason_code,
+        "diagnostics": diagnostics,
     }

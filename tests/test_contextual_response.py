@@ -198,3 +198,64 @@ def test_explicit_mode_shows_tool_name() -> None:
     assert "Intent: project_search" in output
     assert "Tool: search_in_files" in output
     assert "No matches found." in output
+
+
+def test_test_run_uses_bounded_diagnostic_summary() -> None:
+    result = _success_result(
+        "test_run",
+        {
+            "ok": True,
+            "error": None,
+            "data": {
+                "stdout": "SECRET-FULL-PYTEST-OUTPUT" * 100,
+                "diagnostics": {
+                    "returncode": 0,
+                    "timed_out": False,
+                    "duration_ms": 35123,
+                    "reason_code": "",
+                    "warning": None,
+                    "stdout_summary": {
+                        "truncated": False,
+                        "pytest_counts": {"passed": 1102, "skipped": 7},
+                    },
+                },
+            },
+        },
+    )
+
+    output = format_plan_execution_response(result)
+
+    assert "Status: passed" in output
+    assert "Exit code: 0" in output
+    assert "Result: 1102 passed, 7 skipped" in output
+    assert "SECRET-FULL-PYTEST-OUTPUT" not in output
+
+
+def test_compile_run_uses_bounded_diagnostic_summary() -> None:
+    result = _success_result(
+        "terminal_run",
+        {
+            "ok": True,
+            "error": None,
+            "data": {
+                "stdout": "Listing many files" * 100,
+                "diagnostics": {
+                    "returncode": 0,
+                    "timed_out": False,
+                    "duration_ms": 125,
+                    "reason_code": "",
+                    "warning": None,
+                    "stdout_summary": {
+                        "truncated": False,
+                        "pytest_counts": {},
+                    },
+                },
+            },
+        },
+    )
+
+    output = format_plan_execution_response(result)
+
+    assert "Compile check" in output
+    assert "Status: passed" in output
+    assert "Listing many files" not in output
