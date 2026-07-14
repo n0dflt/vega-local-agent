@@ -12,7 +12,7 @@ import time
 import uuid
 from contextlib import ExitStack
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, BinaryIO, Protocol
 
 from core.execution_trace import MAX_TRACE_CHARS, ExecutionTrace, TraceError
@@ -79,6 +79,24 @@ _QUARANTINE_TEMP_NAME = re.compile(r"^\.quarantine-[0-9a-f]{32}\.tmp$")
 _QUARANTINE_NAME = re.compile(
     r"^corrupt-[A-Za-z0-9_.-]{1,120}-[0-9a-f]{16}\.(?:json|jsonl|bin)$"
 )
+_REPORT_FIELDS_V1 = frozenset(
+    {
+        "schema_version",
+        "version",
+        "created_at",
+        "report_type",
+        "status",
+        "error_codes",
+        "production_snapshot",
+        "model_runtime",
+        "documents",
+        "memory",
+        "terminal_policy",
+        "execution_traces",
+        "runtime_files",
+    }
+)
+_REPORT_FIELDS_V2 = _REPORT_FIELDS_V1 | {"local_state"}
 
 
 class StateIntegrityError(RuntimeError):
@@ -96,6 +114,10 @@ class StateLockError(StateIntegrityError):
 
 
 class _LockBusy(Exception):
+    pass
+
+
+class _StateFileTooLarge(Exception):
     pass
 
 
@@ -149,6 +171,23 @@ def platform_lock_adapter() -> LockAdapter:
     return WindowsLockAdapter() if os.name == "nt" else PosixLockAdapter()
 
 
+def _open_lock_stream(path: Path, *, create: bool) -> BinaryIO:
+    if path.is_symlink():
+        raise StateLockError(STATE_LOCK_UNAVAILABLE)
+    flags = os.O_RDWR | (os.O_CREAT if create else 0)
+    flags |= getattr(os, "O_BINARY", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags, 0o600)
+        stream = os.fdopen(descriptor, "r+b")
+        descriptor = None
+        return stream
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _validated_directory(project_root: Path, directory: Path) -> tuple[Path, Path]:
     if not isinstance(project_root, Path) or not isinstance(directory, Path):
         raise StateLockError(STATE_LOCK_UNAVAILABLE)
@@ -174,6 +213,7 @@ class GeneratedStateLock:
         "_stream",
         "_thread_locked",
         "_timeout_seconds",
+        "_root",
     )
 
     def __init__(
@@ -189,7 +229,7 @@ class GeneratedStateLock:
             raise StateLockError(STATE_LOCK_UNAVAILABLE)
         if type(timeout_ms) is not int or not 0 <= timeout_ms <= MAX_LOCK_TIMEOUT_MS:
             raise StateLockError(STATE_LOCK_UNAVAILABLE)
-        _, self._directory = _validated_directory(project_root, directory)
+        self._root, self._directory = _validated_directory(project_root, directory)
         self._scope = scope
         self._timeout_seconds = timeout_ms / 1000
         self._adapter = adapter if adapter is not None else platform_lock_adapter()
@@ -208,13 +248,8 @@ class GeneratedStateLock:
         self._thread_locked = True
         try:
             self._directory.mkdir(parents=True, exist_ok=True)
-            if self.lock_path.is_symlink():
-                raise StateLockError(STATE_LOCK_UNAVAILABLE)
-            flags = os.O_RDWR | os.O_CREAT
-            flags |= getattr(os, "O_BINARY", 0)
-            flags |= getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(self.lock_path, flags, 0o600)
-            stream = os.fdopen(descriptor, "r+b")
+            _validated_directory(self._root, self._directory)
+            stream = _open_lock_stream(self.lock_path, create=True)
             self._stream = stream
             if stream.seek(0, os.SEEK_END) == 0:
                 stream.write(b"\0")
@@ -300,9 +335,7 @@ def probe_generated_state_lock(
         lock_path = target / _LOCK_NAMES[scope]
         if not target.exists() or not lock_path.exists():
             return True, ""
-        if lock_path.is_symlink():
-            return False, STATE_LOCK_UNAVAILABLE
-        stream = lock_path.open("r+b")
+        stream = _open_lock_stream(lock_path, create=False)
         active_adapter = adapter if adapter is not None else platform_lock_adapter()
         try:
             active_adapter.acquire(stream)
@@ -313,7 +346,9 @@ def probe_generated_state_lock(
         finally:
             stream.close()
         return True, ""
-    except (OSError, StateLockError):
+    except StateLockError as exc:
+        return False, exc.code
+    except OSError:
         return False, STATE_LOCK_OPERATION_FAILED
     except Exception:
         return False, STATE_LOCK_OPERATION_FAILED
@@ -351,8 +386,9 @@ class StateIntegrityDiagnostics:
             candidate = Path(relative)
             if (
                 len(relative) > MAX_STATE_RELATIVE_PATH_CHARS
-                or candidate.is_absolute()
-                or candidate.drive
+                or PureWindowsPath(relative).is_absolute()
+                or PureWindowsPath(relative).drive
+                or PurePosixPath(relative).is_absolute()
                 or ".." in candidate.parts
             ):
                 raise ValueError("state integrity paths must be relative")
@@ -434,6 +470,7 @@ class _TraceAnalysis:
     torn_tail: bool
     corrupt: bool
     limit_reached: bool
+    oversized: bool
 
 
 def _trace_paths(root: Path, policy: Any) -> tuple[Path, ...]:
@@ -461,18 +498,17 @@ def _trace_repair_temp_pattern(policy: Any) -> re.Pattern[str]:
 def _analyze_trace(path: Path, maximum_bytes: int) -> _TraceAnalysis | None:
     try:
         if path.is_symlink():
-            return _TraceAnalysis(path, b"", b"", False, True, True)
+            return _TraceAnalysis(path, b"", b"", False, True, True, False)
         if not path.is_file():
             return None
-        size = path.stat().st_size
-        if size > maximum_bytes:
-            return _TraceAnalysis(path, b"", b"", False, True, False)
-        original = path.read_bytes()
+        original = _read_bounded_file(path, maximum_bytes)
+    except _StateFileTooLarge:
+        return _TraceAnalysis(path, b"", b"", False, True, False, True)
     except OSError:
-        return _TraceAnalysis(path, b"", b"", False, True, False)
+        return _TraceAnalysis(path, b"", b"", False, True, False, False)
     lines = original.splitlines(keepends=True)
     if len(lines) > MAX_RECOVERY_RECORDS:
-        return _TraceAnalysis(path, original, original, False, False, True)
+        return _TraceAnalysis(path, original, original, False, False, True, False)
     repaired: list[bytes] = []
     corrupt = False
     torn = bool(lines and not lines[-1].endswith(b"\n"))
@@ -493,7 +529,47 @@ def _analyze_trace(path: Path, maximum_bytes: int) -> _TraceAnalysis | None:
                 corrupt = True
             continue
         repaired.append(payload + b"\n")
-    return _TraceAnalysis(path, original, b"".join(repaired), torn, corrupt, False)
+    return _TraceAnalysis(
+        path, original, b"".join(repaired), torn, corrupt, False, False
+    )
+
+
+def _read_bounded_file(path: Path, maximum_bytes: int) -> bytes:
+    if path.is_symlink():
+        raise OSError
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags)
+        stream = os.fdopen(descriptor, "rb")
+        descriptor = None
+        with stream:
+            content = stream.read(maximum_bytes + 1)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if len(content) > maximum_bytes:
+        raise _StateFileTooLarge
+    return content
+
+
+def _valid_report_content(content: bytes) -> bool:
+    try:
+        value = json.loads(content.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(value, dict) or type(value.get("schema_version")) is not int:
+        return False
+    expected = _REPORT_FIELDS_V1 if value["schema_version"] == 1 else _REPORT_FIELDS_V2
+    return (
+        value["schema_version"] in {1, 2}
+        and set(value) == expected
+        and value.get("report_type") == "runtime_diagnostics"
+        and isinstance(value.get("version"), str)
+        and isinstance(value.get("created_at"), str)
+        and isinstance(value.get("status"), str)
+        and isinstance(value.get("error_codes"), list)
+    )
 
 
 def _bounded_named_files(directory: Path, pattern: re.Pattern[str], limit: int) -> tuple[list[Path], bool]:
@@ -594,12 +670,10 @@ def inspect_local_state(
     scan_limit = scan_limit or reports_limited
     for path in reports:
         try:
-            if path.stat().st_size > policy.max_doctor_report_bytes:
+            content = _read_bounded_file(path, policy.max_doctor_report_bytes)
+            if not _valid_report_content(content):
                 raise ValueError
-            value = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(value, dict):
-                raise ValueError
-        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        except (OSError, _StateFileTooLarge, ValueError):
             corrupt += 1
             if corrupt >= policy.max_state_scan_files:
                 scan_limit = True
@@ -657,7 +731,13 @@ def _quarantine_copy(source: Path, content: bytes, directory: Path) -> bool:
     try:
         directory.mkdir(parents=True, exist_ok=True)
         if target.exists():
-            return True
+            if target.is_symlink() or not target.is_file():
+                return False
+            try:
+                existing = _read_bounded_file(target, len(content))
+            except (OSError, _StateFileTooLarge):
+                return False
+            return hashlib.sha256(existing).digest() == hashlib.sha256(content).digest()
         with temporary.open("xb") as stream:
             stream.write(content)
             stream.flush()
@@ -688,7 +768,12 @@ def _quarantine_oversized(source: Path, directory: Path) -> bool:
         return False
 
 
-def _remove_stale_temps(directory: Path, pattern: re.Pattern[str], policy: Any, now: float) -> tuple[int, bool]:
+def _remove_stale_temps(
+    directory: Path,
+    pattern: re.Pattern[str],
+    policy: Any,
+    now: float,
+) -> tuple[int, bool, bool]:
     removed = 0
     files, limited = _bounded_named_files(directory, pattern, policy.max_state_scan_files)
     for path in files:
@@ -698,24 +783,26 @@ def _remove_stale_temps(directory: Path, pattern: re.Pattern[str], policy: Any, 
             path.unlink()
             removed += 1
         except OSError:
-            return removed, True
-    return removed, limited
+            return removed, limited, True
+    return removed, limited, False
 
 
-def _retain_quarantine(directory: Path, keep: int, scan_limit: int) -> tuple[int, bool]:
+def _retain_quarantine(
+    directory: Path, keep: int, scan_limit: int
+) -> tuple[int, bool, bool]:
     files, limited = _bounded_named_files(directory, _QUARANTINE_NAME, scan_limit)
     try:
         ordered = sorted(files, key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
     except OSError:
-        return 0, True
+        return 0, limited, True
     removed = 0
     for path in ordered[keep:]:
         try:
             path.unlink()
             removed += 1
         except OSError:
-            return removed, True
-    return removed, limited
+            return removed, limited, True
+    return removed, limited, False
 
 
 def repair_local_state(
@@ -763,12 +850,7 @@ def repair_local_state(
                 if analysis.corrupt:
                     content = analysis.original
                     if not content:
-                        try:
-                            oversized = path.stat().st_size > policy.max_trace_file_bytes
-                        except OSError:
-                            errors.extend((QUARANTINE_FAILED, STATE_REPAIR_FAILED))
-                            continue
-                        if oversized:
+                        if analysis.oversized:
                             if not _quarantine_oversized(path, quarantine_directory):
                                 errors.extend((QUARANTINE_FAILED, STATE_REPAIR_FAILED))
                                 continue
@@ -800,17 +882,24 @@ def repair_local_state(
                 errors.append(STATE_SCAN_LIMIT_REACHED)
             for path in reports:
                 try:
-                    if path.stat().st_size > policy.max_doctor_report_bytes:
-                        raise ValueError
-                    content = path.read_bytes()
-                    value = json.loads(content.decode("utf-8"))
-                    if not isinstance(value, dict):
+                    content = _read_bounded_file(
+                        path, policy.max_doctor_report_bytes
+                    )
+                    if not _valid_report_content(content):
                         raise ValueError
                     continue
-                except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+                except _StateFileTooLarge:
+                    if not _quarantine_oversized(path, quarantine_directory):
+                        errors.extend((QUARANTINE_FAILED, STATE_REPAIR_FAILED))
+                        continue
+                    corrupt_quarantined += 1
+                    continue
+                except (OSError, ValueError):
                     try:
-                        content = path.read_bytes()
-                    except OSError:
+                        content = _read_bounded_file(
+                            path, policy.max_doctor_report_bytes
+                        )
+                    except (OSError, _StateFileTooLarge):
                         errors.append(STATE_REPAIR_FAILED)
                         continue
                 if not _quarantine_copy(path, content, quarantine_directory):
@@ -828,18 +917,24 @@ def repair_local_state(
                 (trace_directory, _trace_repair_temp_pattern(policy)),
                 (quarantine_directory, _QUARANTINE_TEMP_NAME),
             ):
-                removed, limited = _remove_stale_temps(directory, pattern, policy, timestamp)
+                removed, limited, failed = _remove_stale_temps(
+                    directory, pattern, policy, timestamp
+                )
                 stale_removed += removed
                 if limited:
                     errors.append(STATE_SCAN_LIMIT_REACHED)
+                if failed:
+                    errors.append(STATE_REPAIR_FAILED)
 
-            quarantine_removed, limited = _retain_quarantine(
+            quarantine_removed, limited, failed = _retain_quarantine(
                 quarantine_directory,
                 policy.retained_quarantine_files,
                 policy.max_state_scan_files,
             )
             if limited:
                 errors.append(STATE_SCAN_LIMIT_REACHED)
+            if failed:
+                errors.extend((QUARANTINE_FAILED, STATE_REPAIR_FAILED))
     except StateLockError as exc:
         errors.append(exc.code)
     except Exception:

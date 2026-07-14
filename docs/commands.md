@@ -94,7 +94,7 @@ file. No doctor output includes an absolute project path.
 <!-- VEGA DOCGEN START: commands -->
 ## Generated command reference
 
-Project version: `v2.12.0`
+Project version: `v2.12.1`
 
 This section is generated from `scripts/vega.py`.
 

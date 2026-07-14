@@ -5,7 +5,7 @@
 Current stable release:
 
 ```text
-v2.12.0 - Local State Integrity & Recovery
+v2.12.1 - Local State Integrity & Recovery Stabilization
 ```
 
 Previous stable release:
@@ -276,3 +276,13 @@ Implemented in `feature/v2.12-state-integrity-recovery`:
 
 See [`docs/v2.12-architecture.md`](v2.12-architecture.md). The next release scope
 is `TBD`.
+
+## v2.12.1 stabilization status
+
+Status: `implemented and release-validated`
+
+The patch release fixes clean-checkout validation, hardens lock descriptors,
+bounded reads, report classification, quarantine substitution, and failure-code
+accuracy, and establishes Windows/Linux CI for Python 3.12–3.14. Product
+execution and trace APIs remain unchanged. v2.13 Controlled Coding Workflows is
+the next release scope.

@@ -152,7 +152,7 @@ VEGA не должна:
 <!-- VEGA DOCGEN START: architecture -->
 ## Generated project snapshot
 
-Project version: `v2.12.0`
+Project version: `v2.12.1`
 
 This section is generated from the current project tree.
 

@@ -10,7 +10,7 @@ gates.
 ## Current version
 
 ```text
-v2.12.0 - Local State Integrity & Recovery
+v2.12.1 - Local State Integrity & Recovery Stabilization
 ```
 
 The previous stable release is:
@@ -968,3 +968,13 @@ execution route through `PlanExecutor` and `ToolExecutor` is unchanged.
 
 See the [v2.12 architecture](docs/v2.12-architecture.md) and
 [v2.12.0 release notes](docs/releases/v2.12.0.md).
+
+### v2.12.1 stabilization
+
+v2.12.1 makes the v2.12 release reproducible from a clean checkout, hardens
+bounded generated-state reads and quarantine evidence, closes lock descriptor
+and symlink-probe edge cases, validates diagnostic-report structure, and adds a
+least-privilege Windows/Linux GitHub Actions baseline for Python 3.12–3.14.
+
+See the [v2.12.1 release notes](docs/releases/v2.12.1.md) and
+[CI maintenance guide](docs/ci.md).

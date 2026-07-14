@@ -1,104 +1,75 @@
-# VEGA v2.12.0 Release Notes
+# VEGA v2.12.1 Release Notes
 
-VEGA v2.12.0, **Local State Integrity & Recovery**, coordinates generated local
-state across VEGA processes and provides an explicit bounded recovery path after
-interrupted or corrupted writes.
+VEGA v2.12.1 stabilizes **Local State Integrity & Recovery** after an independent
+audit of the published v2.12.0 release.
 
-## Highlights
+## Patch-release decision
 
-* Standard-library Windows and POSIX interprocess locks protect trace append,
-  rotation, diagnostic export, and report retention.
-* `/doctor state status` is an exact read-only integrity command.
-* `/doctor state repair` is the only explicit state mutation command and accepts
-  no arguments or paths.
-* Torn JSONL tails are recovered while earlier valid records are preserved;
-  complete corruption is quarantined.
-* Recognized stale atomic-write files and quarantine retention are cleaned under
-  strict work and traversal limits.
-* Immutable manually serialized diagnostics expose only allowlisted metadata and
-  fixed safe codes.
+A patch release is required. In a clean checkout, the configured pytest
+`--basetemp .tmp/...` parent did not exist because `.tmp` was entirely ignored;
+the reproduced baseline produced 178 setup errors until the directory was
+created. The security review also found material state-integrity edge cases in
+quarantine evidence validation, report structure validation, bounded reads,
+descriptor cleanup, and failure-code accuracy.
 
-## Coordination and persistence
+## Correctness and security fixes
 
-Fixed `.trace-state.lock` and `.report-state.lock` files live inside validated
-generated-state directories. Acquisition is non-blocking with a strict timeout
-capped at five seconds. Windows uses byte-range locks and POSIX uses advisory
-`flock`; process-local synchronization remains in place. Context cleanup and OS
-process exit release locks, including failure-injection and abandoned-process
-cases.
+* `.tmp/.gitkeep` makes built-in validation reproducible while generated temp
+  content remains ignored.
+* Lock stream creation closes its raw descriptor on failure. Existing lock probes
+  use the same no-follow open path as mutation locks.
+* Generated trace/report reads are limited to the configured cap plus one byte,
+  including concurrent-growth races.
+* Existing content-addressed quarantine evidence must exactly match expected
+  content before repair can replace the source.
+* Generated reports require a compatible v2.11/v2.12 top-level schema; arbitrary
+  JSON objects no longer pass as healthy reports.
+* Stale-temp cleanup and quarantine-retention failures use explicit repair and
+  quarantine codes instead of a misleading scan-limit code.
 
-Trace records and reports flush and `fsync`. Reports retain same-directory temp
-creation and atomic replacement. Trace rotation now permits a file to reach its
-configured ceiling exactly and rotates before another record would exceed it.
-Persistence failures remain best effort and cannot alter tool, plan, or normal
-user results.
+## Cross-platform CI
 
-## Explicit recovery
+The new secret-free GitHub Actions workflow runs on pull requests and pushes to
+`main`. Windows and Linux test Python 3.12, 3.13, and 3.14. The matrix runs
+compileall and the full suite; one release-gate job runs focused critical tests,
+identity, production policy consistency, smoke, repository hygiene, and the
+built-in Release Manager.
 
-`/doctor state status` does not create directories or lock files. It reports only
-lock availability, stale-temp count, torn-tail state, corrupt-file count,
-quarantine count, relative paths, scan state, and fixed codes.
-
-`/doctor state repair` rechecks generated state under locks in fixed order. It
-normalizes a valid final JSONL record missing a newline, removes an invalid
-incomplete final fragment, quarantines newline-terminated corruption before
-atomically restoring valid records, atomically confines oversized traces without
-reading their payload, and deletes only exact stale temp names. Repeated repair
-is safe and bounded.
-
-Unknown, fuzzy, differently cased, extra-whitespace, additional-argument,
-absolute-path, and relative-path variants do not mutate the filesystem.
-
-## Security boundaries
-
-Policy schema version 2 rejects unknown, missing, duplicate, incorrectly typed,
-boolean-as-integer, zero/negative, above-cap, absolute, drive-qualified,
-traversing, blocked, and symlink-escaping values. Runtime use rechecks directory
-and lock-file symlinks. Repair never recurses or accepts an arbitrary path.
-
-Doctor output and serialized reports exclude prompts, user content, evidence,
-payloads, tool arguments/results, command output, exceptions, tracebacks,
-absolute user paths, environment values, tokens, credentials, callbacks, and
-arbitrary representations. Diagnostics remain observer-only and do not gain a
-tool, model, network, telemetry, autonomous repair, or publication path.
+Workflow permissions are read-only, checkout credentials are not persisted, and
+official actions are pinned to immutable commit SHAs. CI cannot commit, merge,
+tag, publish, access Ollama, or use repository secrets. Skip reasons are visible
+with `pytest -rs`.
 
 ## Compatibility and migration
 
-Existing public trace APIs and the v2.10/v2.11 trace record shape are unchanged.
-Valid old active and backup traces remain readable. Trace persistence remains
-opt-in with `VEGA_EXECUTION_TRACE`. No generated-state migration is automatic;
-projects adopt the supplied diagnostics policy schema version 2.
-
-Rollback to v2.11 requires restoring its diagnostics policy schema. Valid traces
-remain compatible. Lock and quarantine files are ignored by Git and can be left
-in place; stop all VEGA processes before manual cleanup.
+No migration is required. Valid v2.10/v2.11 traces, v2.11 reports, all valid
+v2.12 state, public trace APIs, `/doctor state status`, `/doctor state repair`,
+and existing manual commands remain compatible. Invalid generated reports now
+fail closed and are quarantined only by explicit repair.
 
 ## Validation
 
-The release gate includes focused multiprocessing, contention, adapter,
-failure-injection, rotation, interrupted-write, recovery, quarantine, path,
-limit, command, sentinel, compatibility, release identity, and documentation
-tests; the full suite; compileall; identity and production policy consistency;
-smoke tests; built-in Release Manager; Git whitespace and generated-state checks;
-and all GitHub CI checks.
+The release gate covers a fresh detached worktree, tracing enabled/disabled,
+legacy and rotated traces, multiprocessing, report interruption, torn and
+complete corruption, quarantine retention/substitution, contention, cleanup,
+Windows/POSIX adapters, compileall, identity, production policy, smoke, Release
+Manager, whitespace, Git hygiene, and the full Windows/Linux Python matrix.
 
-Local release-gate results on Windows:
+Local Windows/Python 3.12 validation recorded `117 passed, 2 skipped` for the
+focused stabilization/release set and `996 passed, 5 skipped, 133 subtests` for
+the complete suite. Compileall, identity, policy consistency, smoke, whitespace,
+and generated-state hygiene passed. The five skips are explicit symlink tests on
+an account without symlink privileges; four predate v2.12.1 and the v2.12 state
+lock test uses the same platform condition. The two collection warnings predate
+v2.12.1 and concern helper classes with constructors.
 
-* focused v2.12/release tests: `106 passed, 2 skipped`;
-* full suite: `1126 test results, 0 failures, 0 errors, 5 skipped`;
-* compileall, identity, production policy consistency, smoke test, Release
-  Manager, working/staged whitespace, and generated-state tracking: passed.
-
-All five full-suite skips require Windows symlink privileges unavailable in the
-validation environment; four predate v2.12 and the new state-integrity symlink
-test uses the same conditional coverage. The two production-policy warnings are
-the intentional nonautomatic `bug_fix` and `test_run` routes retained from
-v2.10/v2.11.
+Windows/Linux Python-matrix results and CI job links are recorded in the pull
+request and published GitHub Release after all jobs complete.
 
 ## Known limitations
 
-* Locks are advisory and cannot coordinate unrelated programs that ignore them.
-* Recovery is bounded rather than forensic and fails closed at hard limits.
-* Trace persistence remains opt-in and reports remain local-only.
-* There is no startup repair, background monitor, remote telemetry, upload,
-  autonomous execution, or application-level automatic publishing.
+* Locks coordinate cooperating VEGA processes and remain advisory.
+* Recovery is bounded and fail-closed rather than forensic.
+* Windows symlink tests conditionally skip without symlink privileges.
+* No startup repair, background monitor, telemetry, autonomous execution, model
+  tool authority, or in-product publication is provided.

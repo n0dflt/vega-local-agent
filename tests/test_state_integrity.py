@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import multiprocessing
 import os
@@ -9,6 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+import core.state_integrity as state_integrity
 
 from core.agent_runtime import handle_doctor_command
 from core.execution_trace import (
@@ -23,9 +26,11 @@ from core.runtime_diagnostics import DiagnosticsPolicy
 from core.state_integrity import (
     CORRUPT_GENERATED_STATE,
     MAX_LOCK_TIMEOUT_MS,
+    QUARANTINE_FAILED,
     RECOVERED_TORN_TRACE_TAIL,
     STATE_LOCK_OPERATION_FAILED,
     STATE_LOCK_TIMEOUT,
+    STATE_REPAIR_FAILED,
     STATE_SCAN_LIMIT_REACHED,
     GeneratedStateLock,
     PosixLockAdapter,
@@ -34,6 +39,7 @@ from core.state_integrity import (
     WindowsLockAdapter,
     format_state_status,
     inspect_local_state,
+    probe_generated_state_lock,
     repair_local_state,
 )
 
@@ -220,6 +226,47 @@ def test_release_failure_still_releases_process_lock(tmp_path: Path) -> None:
         assert True
 
 
+def test_fdopen_failure_closes_descriptor_and_releases_thread_lock(
+    tmp_path: Path, monkeypatch
+) -> None:
+    directory = tmp_path / "logs" / "diagnostics"
+    closed: list[int] = []
+    with monkeypatch.context() as patcher:
+        patcher.setattr(state_integrity.os, "open", lambda *args, **kwargs: 4242)
+        patcher.setattr(
+            state_integrity.os,
+            "fdopen",
+            lambda *args, **kwargs: (_ for _ in ()).throw(OSError("secret")),
+        )
+        patcher.setattr(state_integrity.os, "close", closed.append)
+        with pytest.raises(StateLockError) as captured:
+            GeneratedStateLock(tmp_path, directory, "trace", 50).acquire()
+    assert captured.value.code == STATE_LOCK_OPERATION_FAILED
+    assert closed == [4242]
+    with GeneratedStateLock(tmp_path, directory, "trace", 500):
+        assert True
+
+
+def test_bounded_read_fdopen_failure_closes_descriptor(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = tmp_path / "report.json"
+    path.write_text("{}", encoding="utf-8")
+    closed: list[int] = []
+    monkeypatch.setattr(state_integrity.os, "open", lambda *args, **kwargs: 4242)
+    monkeypatch.setattr(
+        state_integrity.os,
+        "fdopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("secret")),
+    )
+    monkeypatch.setattr(state_integrity.os, "close", closed.append)
+
+    with pytest.raises(OSError, match="secret"):
+        state_integrity._read_bounded_file(path, 16)
+
+    assert closed == [4242]
+
+
 def test_fixed_lock_scope_and_timeout_bounds_reject_unsafe_inputs(tmp_path: Path) -> None:
     with pytest.raises(StateLockError):
         GeneratedStateLock(tmp_path, tmp_path.parent, "trace", 10)
@@ -246,6 +293,9 @@ def test_symlinked_lock_file_and_generated_directory_fail_closed(tmp_path: Path)
 
     with pytest.raises(StateLockError):
         GeneratedStateLock(tmp_path, directory, "trace", 50).acquire()
+    available, code = probe_generated_state_lock(tmp_path, directory, "trace")
+    assert not available
+    assert code == "state_lock_unavailable"
     assert external_lock.read_bytes() == b"0"
 
     lock_path.unlink()
@@ -436,6 +486,27 @@ def test_complete_trace_corruption_is_quarantined_and_valid_records_survive(tmp_
     assert len(list(quarantine.glob("corrupt-*.jsonl"))) == 1
 
 
+def test_preexisting_wrong_quarantine_evidence_blocks_repair(tmp_path: Path) -> None:
+    policy = _policy(tmp_path)
+    path = tmp_path / policy.trace_store_path
+    path.parent.mkdir(parents=True)
+    original = serialize_trace(_trace("survivor")).encode("utf-8") + b"\n{broken}\n"
+    path.write_bytes(original)
+    quarantine = tmp_path / Path(policy.trace_store_path).parent / "quarantine"
+    quarantine.mkdir()
+    digest = hashlib.sha256(original).hexdigest()[:16]
+    target = quarantine / f"corrupt-{path.name}-{digest}.jsonl"
+    target.write_bytes(b"substituted")
+
+    result = repair_local_state(tmp_path, policy)
+
+    assert not result.succeeded
+    assert QUARANTINE_FAILED in result.error_codes
+    assert STATE_REPAIR_FAILED in result.error_codes
+    assert path.read_bytes() == original
+    assert target.read_bytes() == b"substituted"
+
+
 def test_corrupt_report_is_quarantined_without_touching_unrelated_file(tmp_path: Path) -> None:
     policy = _policy(tmp_path)
     reports = tmp_path / policy.doctor_reports_dir
@@ -449,6 +520,43 @@ def test_corrupt_report_is_quarantined_without_touching_unrelated_file(tmp_path:
     assert result.corrupted_files_quarantined == 1
     assert not corrupt.exists()
     assert unrelated.read_text(encoding="utf-8") == "TOP-SECRET-KEEP"
+
+
+def test_structurally_invalid_report_is_corrupt_and_quarantined(tmp_path: Path) -> None:
+    policy = _policy(tmp_path)
+    reports = tmp_path / policy.doctor_reports_dir
+    reports.mkdir(parents=True)
+    report = reports / "doctor-20260714T000000000000Z.json"
+    report.write_text("{}", encoding="utf-8")
+
+    assert inspect_local_state(tmp_path, policy).corrupted_generated_files == 1
+    result = repair_local_state(tmp_path, policy)
+    assert result.corrupted_files_quarantined == 1
+    assert not report.exists()
+
+
+def test_v211_report_shape_remains_compatible(tmp_path: Path) -> None:
+    policy = _policy(tmp_path)
+    reports = tmp_path / policy.doctor_reports_dir
+    reports.mkdir(parents=True)
+    report = reports / "doctor-20260714T000000000000Z.json"
+    fields = {
+        "schema_version": 1,
+        "version": "v2.11.0",
+        "created_at": "2026-07-14T00:00:00.000000Z",
+        "report_type": "runtime_diagnostics",
+        "status": "healthy",
+        "error_codes": [],
+        "production_snapshot": {},
+        "model_runtime": {},
+        "documents": {},
+        "memory": {},
+        "terminal_policy": {},
+        "execution_traces": {},
+        "runtime_files": {},
+    }
+    report.write_text(json.dumps(fields), encoding="utf-8")
+    assert inspect_local_state(tmp_path, policy).corrupted_generated_files == 0
 
 
 def test_oversized_trace_is_quarantined_without_reading_payload(tmp_path: Path) -> None:
@@ -491,6 +599,26 @@ def test_quarantine_retention_is_bounded_and_preserves_unknown_files(tmp_path: P
     assert result.quarantine_files_removed == 2
     assert len(list(quarantine.glob("corrupt-*.jsonl"))) == 2
     assert unknown.read_text(encoding="utf-8") == "keep"
+
+
+def test_cleanup_failure_uses_repair_failure_code(tmp_path: Path, monkeypatch) -> None:
+    policy = _policy(tmp_path, stale_temp_age_seconds=60)
+    reports = tmp_path / policy.doctor_reports_dir
+    reports.mkdir(parents=True)
+    stale = reports / ".doctor-20260714T000000000000Z.json.deadbeef.tmp"
+    stale.write_bytes(b"partial")
+    os.utime(stale, (100, 100))
+    original_unlink = Path.unlink
+
+    def fail_stale(path: Path, *args: object, **kwargs: object) -> None:
+        if path == stale:
+            raise OSError("secret")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_stale)
+    result = repair_local_state(tmp_path, policy, now=1_000)
+    assert STATE_REPAIR_FAILED in result.error_codes
+    assert STATE_SCAN_LIMIT_REACHED not in result.error_codes
 
 
 def test_directory_scan_cap_is_reported(tmp_path: Path) -> None:

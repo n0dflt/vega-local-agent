@@ -10,7 +10,7 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from core.execution_trace import (
@@ -149,7 +149,14 @@ def _validate_relative_path(root: Path, value: object, field: str) -> str:
             f"{field} must be at most {MAX_DIAGNOSTICS_PATH_CHARS} characters"
         )
     candidate = Path(raw)
-    if candidate.is_absolute() or candidate.drive or raw.startswith(("/", "\\")):
+    windows_candidate = PureWindowsPath(raw)
+    posix_candidate = PurePosixPath(raw)
+    if (
+        windows_candidate.is_absolute()
+        or windows_candidate.drive
+        or posix_candidate.is_absolute()
+        or raw.startswith(("/", "\\"))
+    ):
         raise DiagnosticsPolicyError(f"{field} cannot be absolute")
     if ".." in candidate.parts:
         raise DiagnosticsPolicyError(f"{field} cannot contain parent traversal")
@@ -191,12 +198,15 @@ class DiagnosticsPolicy:
             ("doctor_reports_dir", self.doctor_reports_dir),
         ):
             candidate = Path(value)
+            windows_candidate = PureWindowsPath(value)
+            posix_candidate = PurePosixPath(value)
             if (
                 not isinstance(value, str)
                 or not value
                 or len(value) > MAX_DIAGNOSTICS_PATH_CHARS
-                or candidate.is_absolute()
-                or candidate.drive
+                or windows_candidate.is_absolute()
+                or windows_candidate.drive
+                or posix_candidate.is_absolute()
                 or ".." in candidate.parts
                 or any(part.lower() in _BLOCKED_PATH_PARTS for part in candidate.parts)
             ):
@@ -247,23 +257,16 @@ class DiagnosticsPolicy:
 
     @classmethod
     def defaults(cls, project_root: Path) -> "DiagnosticsPolicy":
-        root = project_root.resolve()
+        if not isinstance(project_root, Path):
+            raise TypeError("project_root must be a pathlib.Path")
         return cls(
             schema_version=DIAGNOSTICS_SCHEMA_VERSION,
-            trace_store_path=_validate_relative_path(
-                root,
-                "logs/diagnostics/execution-traces.jsonl",
-                "trace_store_path",
-            ),
+            trace_store_path="logs/diagnostics/execution-traces.jsonl",
             max_trace_file_bytes=MAX_TRACE_FILE_BYTES,
             retained_trace_backups=3,
             max_trace_scan_files=4,
             max_trace_records=256,
-            doctor_reports_dir=_validate_relative_path(
-                root,
-                "logs/diagnostics/reports",
-                "doctor_reports_dir",
-            ),
+            doctor_reports_dir="logs/diagnostics/reports",
             max_doctor_report_bytes=512 * 1024,
             retained_doctor_reports=10,
             lock_timeout_ms=500,
@@ -602,7 +605,12 @@ class TraceStoreDiagnostics:
         _count(self.backup_count, "backup_count")
         _count(self.valid_records, "valid_records")
         candidate = Path(self.store_path)
-        if candidate.is_absolute() or ".." in candidate.parts:
+        if (
+            PureWindowsPath(self.store_path).is_absolute()
+            or PureWindowsPath(self.store_path).drive
+            or PurePosixPath(self.store_path).is_absolute()
+            or ".." in candidate.parts
+        ):
             raise DiagnosticsError("store_path must be relative")
         object.__setattr__(self, "store_path", candidate.as_posix())
         if self.latest is not None and not isinstance(self.latest, TraceLatestDiagnostics):

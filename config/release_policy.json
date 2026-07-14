@@ -8,9 +8,14 @@
     "docs/commands.md",
     "docs/security.md",
     "docs/v2.12-architecture.md",
-    "docs/releases/v2.12.0.md",
+    "docs/releases/v2.12.1.md",
     "config/diagnostics_policy.json",
-    "config/release_policy.json"
+    "config/release_policy.json",
+    ".github/workflows/ci.yml",
+    "docs/ci.md",
+    "scripts/check_repository_hygiene.py",
+    "scripts/run_release_check.py",
+    ".tmp/.gitkeep"
   ],
   "branch_policy": {
     "allowed_check_branches": [
@@ -28,7 +33,8 @@
       "identity",
       "policy-consistency",
       "compile",
-      "tests"
+      "tests",
+      "repository-hygiene"
     ]
   },
   "notes": {

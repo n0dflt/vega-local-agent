@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_identity_is_synchronized() -> None:
-    assert VERSION == "v2.12.0"
+    assert VERSION == "v2.12.1"
     assert BANNER_VERSION == VERSION
 
     for relative in (
@@ -25,10 +25,10 @@ def test_release_identity_is_synchronized() -> None:
         "docs/security.md",
         "docs/roadmap.md",
         "docs/v2.12-architecture.md",
-        "docs/releases/v2.12.0.md",
+        "docs/releases/v2.12.1.md",
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
-        assert "v2.12.0" in text, relative
+        assert "v2.12.1" in text, relative
 
 
 def test_required_architecture_and_release_notes_exist() -> None:
@@ -36,11 +36,11 @@ def test_required_architecture_and_release_notes_exist() -> None:
         (ROOT / "config" / "release_policy.json").read_text(encoding="utf-8")
     )
 
-    assert "docs/releases/v2.12.0.md" in policy["required_files"]
+    assert "docs/releases/v2.12.1.md" in policy["required_files"]
     assert "docs/v2.12-architecture.md" in policy["required_files"]
     assert "config/diagnostics_policy.json" in policy["required_files"]
     assert (ROOT / "docs" / "v2.12-architecture.md").is_file()
-    assert (ROOT / "docs" / "releases" / "v2.12.0.md").is_file()
+    assert (ROOT / "docs" / "releases" / "v2.12.1.md").is_file()
 
 
 def test_release_policy_forbids_automatic_publication() -> None:
@@ -65,19 +65,25 @@ def test_release_check_includes_policy_consistency() -> None:
     assert "policy-consistency" in release_policy["checks"]["commands"]
     assert commands["policy-consistency"]["argv"] == [
         "python",
-        "scripts\\check_policy_consistency.py",
+        "scripts/check_policy_consistency.py",
     ]
     assert commands["tests"]["argv"] == [
         "python",
         "-m",
         "pytest",
         "-q",
+        "-rs",
         "-p",
         "no:cacheprovider",
         "--basetemp",
         ".tmp/pytest-release",
         "--tb=short",
     ]
+    assert commands["repository-hygiene"]["argv"] == [
+        "python",
+        "scripts/check_repository_hygiene.py",
+    ]
+    assert "repository-hygiene" in release_policy["checks"]["commands"]
 
 
 def test_production_snapshot_has_no_blocking_consistency_issue() -> None:
@@ -126,7 +132,7 @@ def test_release_documents_contain_no_known_mojibake() -> None:
         "docs/architecture.md",
         "docs/roadmap.md",
         "docs/v2.12-architecture.md",
-        "docs/releases/v2.12.0.md",
+        "docs/releases/v2.12.1.md",
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert all(marker not in text for marker in markers), relative

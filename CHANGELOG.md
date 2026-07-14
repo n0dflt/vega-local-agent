@@ -4,6 +4,34 @@
 
 No unreleased changes.
 
+## v2.12.1 - Local State Integrity Stabilization
+
+Fixed:
+
+* Clean checkouts now contain the ignored `.tmp` parent required by configured
+  pytest and Release Manager basetemp paths.
+* Lock-file opens close raw descriptors when stream construction fails and the
+  read-only lock probe uses the same no-follow open path as mutation locks.
+* Trace and report reads remain bounded if a file grows after metadata checks.
+* Existing content-addressed quarantine evidence is verified before repair;
+  substituted evidence blocks mutation with fixed failure codes.
+* Diagnostic reports require a compatible v2.11/v2.12 top-level schema instead
+  of accepting any JSON object.
+* Temp cleanup and quarantine-retention failures no longer masquerade as scan
+  limits.
+
+CI:
+
+* Added least-privilege pull-request and `main` CI for Windows and Linux on
+  Python 3.12, 3.13, and 3.14, with immutable official action pins.
+* Added focused, full-suite, compile, identity, policy, smoke, Release Manager,
+  whitespace, and generated-state hygiene gates without publication authority.
+
+Compatibility:
+
+* Valid v2.10/v2.11 traces, v2.11 diagnostic reports, v2.12 state, public trace
+  APIs, and all existing manual commands remain compatible.
+
 ## v2.12.0 - Local State Integrity & Recovery
 
 Added:

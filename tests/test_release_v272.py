@@ -18,9 +18,9 @@ from tools.registry import TOOL_REGISTRY
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class ReleaseV212Tests(unittest.TestCase):
+class ReleaseV121Tests(unittest.TestCase):
     def test_version_identity_and_release_documentation_are_synchronized(self):
-        self.assertEqual(VERSION, "v2.12.0")
+        self.assertEqual(VERSION, "v2.12.1")
 
         for relative in (
             "README.md",
@@ -29,7 +29,7 @@ class ReleaseV212Tests(unittest.TestCase):
         ):
             with self.subTest(relative=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("v2.12.0", text)
+                self.assertIn("v2.12.1", text)
 
     def test_apache_license_files_exist(self):
         license_path = ROOT / "LICENSE"
