@@ -700,7 +700,7 @@ def append_trace(
     trace: ExecutionTrace,
     policy: Any = None,
 ) -> Path | None:
-    """Best-effort process-local append; tracing failures never escape."""
+    """Best-effort bounded interprocess append; tracing failures never escape."""
 
     if not trace_persistence_enabled():
         return None
@@ -708,18 +708,32 @@ def append_trace(
         return None
     try:
         storage = _storage_policy(project_root, policy)
+        from core.state_integrity import GeneratedStateLock
+
         serialized = serialize_trace(trace)
         encoded = (serialized + "\n").encode("utf-8")
         path = _trace_path(project_root, Path(storage.trace_store_path))
-        with _STORE_LOCK:
+        if not _STORE_LOCK.acquire(timeout=storage.lock_timeout_ms / 1000):
+            return None
+        try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            current_size = path.stat().st_size if path.exists() else 0
-            if current_size + len(encoded) >= storage.max_trace_file_bytes:
-                _rotate_trace_store(path, storage.retained_trace_backups)
-            with path.open("ab") as stream:
-                stream.write(encoded)
+            with GeneratedStateLock(
+                project_root.resolve(),
+                path.parent,
+                "trace",
+                storage.lock_timeout_ms,
+            ):
+                current_size = path.stat().st_size if path.exists() else 0
+                if current_size + len(encoded) > storage.max_trace_file_bytes:
+                    _rotate_trace_store(path, storage.retained_trace_backups)
+                with path.open("ab") as stream:
+                    stream.write(encoded)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+        finally:
+            _STORE_LOCK.release()
         return path
-    except (OSError, TraceError, TypeError, ValueError):
+    except (OSError, TraceError, TypeError, ValueError, RuntimeError):
         return None
 
 
