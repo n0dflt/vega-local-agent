@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import pytest
@@ -22,6 +22,7 @@ from core.execution_trace import (
     load_latest_trace,
     safe_trace_error_code,
     serialize_trace,
+    scan_trace_store,
     trace_persistence_enabled,
 )
 from core.agent_runtime import handle_doctor_command
@@ -251,6 +252,54 @@ def test_trace_rotation_is_bounded(tmp_path: Path, monkeypatch) -> None:
     assert append_trace(tmp_path, _trace()) == path
     assert path.stat().st_size < MAX_TRACE_FILE_BYTES
     assert path.with_name(path.name + ".1").stat().st_size == MAX_TRACE_FILE_BYTES
+
+
+def test_trace_rotation_retains_three_ordered_backups(tmp_path: Path, monkeypatch) -> None:
+    from core.runtime_diagnostics import DiagnosticsPolicy
+
+    monkeypatch.setenv("VEGA_EXECUTION_TRACE", "1")
+    policy = replace(
+        DiagnosticsPolicy.defaults(tmp_path),
+        max_trace_file_bytes=1024,
+        max_trace_records=10,
+    )
+    path = tmp_path / policy.trace_store_path
+    path.parent.mkdir(parents=True)
+    for marker in (b"oldest", b"older", b"newer", b"active"):
+        path.write_bytes(marker + b"x" * 1018)
+        append_trace(tmp_path, _trace(), policy)
+
+    assert path.with_name(path.name + ".1").read_bytes().startswith(b"active")
+    assert path.with_name(path.name + ".2").read_bytes().startswith(b"newer")
+    assert path.with_name(path.name + ".3").read_bytes().startswith(b"older")
+
+
+def test_latest_trace_reads_valid_backup_after_corrupt_active(tmp_path: Path, monkeypatch) -> None:
+    from core.runtime_diagnostics import DiagnosticsPolicy
+
+    monkeypatch.setenv("VEGA_EXECUTION_TRACE", "1")
+    policy = DiagnosticsPolicy.defaults(tmp_path)
+    path = tmp_path / policy.trace_store_path
+    path.parent.mkdir(parents=True)
+    path.with_name(path.name + ".1").write_text(serialize_trace(_trace()) + "\n", encoding="utf-8")
+    path.write_text("{corrupt\n", encoding="utf-8")
+
+    scan = scan_trace_store(tmp_path, policy)
+    assert scan.traces[0].status is TraceStatus.COMPLETED
+    assert scan.invalid_records == 1
+
+
+def test_rotation_failure_does_not_escape(tmp_path: Path, monkeypatch) -> None:
+    from core.runtime_diagnostics import DiagnosticsPolicy
+
+    monkeypatch.setenv("VEGA_EXECUTION_TRACE", "1")
+    policy = replace(DiagnosticsPolicy.defaults(tmp_path), max_trace_file_bytes=1024)
+    path = tmp_path / policy.trace_store_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"x" * 1024)
+    monkeypatch.setattr(Path, "replace", lambda self, target: (_ for _ in ()).throw(OSError()))
+
+    assert append_trace(tmp_path, _trace(), policy) is None
 
 
 def test_latest_trace_returns_last_valid_record(tmp_path: Path, monkeypatch) -> None:

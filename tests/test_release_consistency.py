@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_identity_is_synchronized() -> None:
-    assert VERSION == "v2.10.0"
+    assert VERSION == "v2.11.0"
     assert BANNER_VERSION == VERSION
 
     for relative in (
@@ -24,11 +24,11 @@ def test_release_identity_is_synchronized() -> None:
         "docs/commands.md",
         "docs/security.md",
         "docs/roadmap.md",
-        "docs/v2.10-architecture.md",
-        "docs/releases/v2.10.0.md",
+        "docs/v2.11-architecture.md",
+        "docs/releases/v2.11.0.md",
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
-        assert "v2.10.0" in text, relative
+        assert "v2.11.0" in text, relative
 
 
 def test_required_architecture_and_release_notes_exist() -> None:
@@ -36,9 +36,11 @@ def test_required_architecture_and_release_notes_exist() -> None:
         (ROOT / "config" / "release_policy.json").read_text(encoding="utf-8")
     )
 
-    assert "docs/releases/v2.10.0.md" in policy["required_files"]
-    assert (ROOT / "docs" / "v2.10-architecture.md").is_file()
-    assert (ROOT / "docs" / "releases" / "v2.10.0.md").is_file()
+    assert "docs/releases/v2.11.0.md" in policy["required_files"]
+    assert "docs/v2.11-architecture.md" in policy["required_files"]
+    assert "config/diagnostics_policy.json" in policy["required_files"]
+    assert (ROOT / "docs" / "v2.11-architecture.md").is_file()
+    assert (ROOT / "docs" / "releases" / "v2.11.0.md").is_file()
 
 
 def test_release_policy_forbids_automatic_publication() -> None:
@@ -93,6 +95,10 @@ def test_mutable_runtime_state_is_not_tracked() -> None:
             "--",
             "data/model_profile.json",
             "data/project_state/tasks.json",
+            "logs/diagnostics/execution-traces.jsonl",
+            "logs/diagnostics/execution-traces.jsonl.1",
+            "logs/diagnostics/execution-traces.jsonl.3",
+            "logs/diagnostics/reports/doctor-20260714T000000000000Z.json",
         ],
         cwd=ROOT,
         capture_output=True,
@@ -115,8 +121,8 @@ def test_release_documents_contain_no_known_mojibake() -> None:
         "RELEASE_NOTES.md",
         "docs/architecture.md",
         "docs/roadmap.md",
-        "docs/v2.10-architecture.md",
-        "docs/releases/v2.10.0.md",
+        "docs/v2.11-architecture.md",
+        "docs/releases/v2.11.0.md",
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert all(marker not in text for marker in markers), relative
