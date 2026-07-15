@@ -39,6 +39,11 @@ helpers and direct execution of `scripts/vega_banner.py` are removed. Launch
 VEGA through `scripts/vega.py`/the supplied wrappers; Python presentation code
 can import `scripts.vega_banner.render_banner()` or `ui.startup_screen`.
 
+The stale contextual `bug_fix` planner route is removed. Bug fixes continue to
+use the controlled coding workflow, while patch tools remain outside automatic
+contextual routing. This resolves the inactive intent-route production policy
+warning without widening execution authority.
+
 ## Migration
 
 No data migration is required. Existing model-profile, memory, trace,
@@ -65,7 +70,7 @@ architecture and compatibility boundary.
 
 On Windows with Python 3.12, the focused v3 UI, metrics, compatibility, and
 release suite passed with 71 tests and 5 subtests. The full suite passed with
-1070 tests and 136 subtests; 7 tests
+1112 tests and 139 subtests; 7 tests
 were skipped because the process lacks Windows symlink privileges. Compileall,
 identity, policy consistency, smoke, documentation, dependency consistency,
 repository hygiene, and whitespace checks passed.

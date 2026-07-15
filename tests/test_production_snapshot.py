@@ -50,9 +50,7 @@ def test_current_production_configuration_builds_without_fatal_issues() -> None:
     assert snapshot.consistency_report.ok
     assert snapshot.consistency_report.fatal_issues == ()
     assert snapshot.consistency_report.degraded_issues == ()
-    assert {
-        issue.subject for issue in snapshot.consistency_report.warnings
-    } == {"bug_fix"}
+    assert snapshot.consistency_report.warnings == ()
     assert snapshot.effective_tool_names == tuple(sorted(BUILTIN_TOOL_REGISTRY))
     assert snapshot.plugin_activations == ()
     assert set(snapshot.tool_mapping) == set(snapshot.effective_tool_names)

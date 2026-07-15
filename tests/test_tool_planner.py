@@ -89,28 +89,16 @@ def test_document_analysis_without_source_is_rejected() -> None:
         plan_tools(analysis, _tool_catalog())
 
 
-def test_bug_fix_plan_preserves_permission_levels() -> None:
+def test_bug_fix_is_delegated_to_controlled_workflow() -> None:
     analysis = analyze_intent(
         "Исправь ошибку и проверь тесты"
     )
 
-    plan = plan_tools(analysis, _tool_catalog())
-
-    assert tuple(
-        step.tool_name for step in plan.steps
-    ) == (
-        "files.search",
-        "patches.propose",
-        "tests.run",
-    )
-    assert plan.required_permissions() == (
-        "READ",
-        "DRAFT",
-        "EXECUTE",
-    )
-    assert plan.requires_confirmation(
-        {"READ", "DRAFT"}
-    ) is True
+    with pytest.raises(
+        ToolPlanningError,
+        match="no route is defined for intent: bug_fix",
+    ):
+        plan_tools(analysis, _tool_catalog())
 
 
 def test_code_review_uses_safe_git_diff_tool() -> None:

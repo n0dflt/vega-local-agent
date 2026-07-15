@@ -55,6 +55,13 @@ Compatibility:
   removed. `scripts/vega.py` remains the only CLI entrypoint; compatibility
   imports use `scripts.vega_banner.render_banner()` or `ui.startup_screen`.
 
+Fixed:
+
+* Removed the stale contextual `bug_fix` planner route after controlled coding
+  workflows became the sole production path for bug fixes. The production
+  policy snapshot now reports no inactive intent-route warning without
+  exposing patch tools through automatic contextual routing.
+
 ## v2.13.0 - Controlled Coding Workflows
 
 Added:

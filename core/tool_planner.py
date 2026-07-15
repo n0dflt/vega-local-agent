@@ -84,11 +84,6 @@ _INTENT_ROUTES: Mapping[IntentType, Tuple[str, ...]] = {
         "test.run",
         "terminal.run",
     ),
-    IntentType.BUG_FIX: (
-        "project.search",
-        "patch.propose",
-        "test.run",
-    ),
     IntentType.TEST_RUN: (
         "test.run",
     ),
